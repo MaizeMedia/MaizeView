@@ -18,13 +18,10 @@ updates:
       all:
         patterns: ["*"]
     # Hold breaking majors that need a deliberate migration PR instead of a
-    # group bump (notify/image/rand/dirs/md-5 majors are unreviewed API
-    # changes). sqlx 0.9 landed via its own migration PR.
+    # group bump (image/rand/dirs/md-5 majors are unreviewed API
+    # changes). sqlx 0.9 landed via its own migration PR; notify deps were
+    # unused and removed outright.
     ignore:
-      - dependency-name: "notify"
-        versions: [">= 8"]
-      - dependency-name: "notify-debouncer-full"
-        versions: [">= 0.5"]
       - dependency-name: "image"
         versions: [">= 0.24"]
       - dependency-name: "rand"
