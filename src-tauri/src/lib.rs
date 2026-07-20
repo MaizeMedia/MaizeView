@@ -201,6 +201,7 @@ pub fn run() {
             commands::identify::clear_stashdb_ignore,
             commands::identify::reject_stashdb_match,
             commands::identify::dismiss_stashdb_review,
+            commands::identify::batch_set_stashdb_ignore,
             commands::batch_identify::batch_identify_scenes,
             commands::batch_identify::batch_identify_library,
             commands::batch_identify::stashdb_identify_stats,

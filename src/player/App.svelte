@@ -16,7 +16,7 @@
   import { Play, Pause, Volume2, VolumeX, Loader2, AlertTriangle, SkipForward, SkipBack, Shuffle, Trash2, ListPlus, Plus, Bookmark, BookmarkPlus, X, Maximize2, Minimize2 } from "@lucide/svelte";
   import FavoriteButton from "$components/favorite-button.svelte";
   import { cycleFavoriteLevel } from "$lib/favorite";
-  import { stringifyError } from "$lib/utils";
+  import { stringifyError, fmtTime } from "$lib/utils";
   import {
     sessionCooldownSize,
     shuffleWeight,
@@ -97,6 +97,7 @@
   let hideTimer: ReturnType<typeof setTimeout> | null = null;
   let seeking = $state(false); // suppress time-pos updates while user drags scrubber
   let scrubValue = $state(0); // scrubber position while dragging
+  let lastLiveSeekAt = 0; // throttle for live seek-while-dragging
   let scrubHoverTime = $state<number | null>(null);
   let scrubHoverX = $state(0); // px from left of scrub track
   let scrubPreviewSpriteUrl = $state<string | null>(null);
@@ -300,16 +301,6 @@
     duration && duration > 0 ? Math.min(1, effectiveTime / duration) : 0,
   );
 
-  function fmtTime(s: number): string {
-    if (!isFinite(s) || s < 0) s = 0;
-    const h = Math.floor(s / 3600);
-    const m = Math.floor((s % 3600) / 60);
-    const sec = Math.floor(s % 60);
-    return h > 0
-      ? `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`
-      : `${m}:${String(sec).padStart(2, "0")}`;
-  }
-
   // ─── overlay auto-hide ──────────────────────────────────────────────────
   // Transparent WebView2 passes events through fully-clear pixels to mpv, so
   // we keep a near-invisible hit layer when chrome is hidden. Hide is driven
@@ -381,6 +372,13 @@
   function onScrubInput(e: Event) {
     const input = e.currentTarget as HTMLInputElement;
     scrubValue = Number(input.value);
+    // Live seek: video follows the drag (throttled 150 ms; the exact seek
+    // lands on commit, same as the 4Play per-pane scrubbers).
+    const now = Date.now();
+    if (now - lastLiveSeekAt >= 150) {
+      lastLiveSeekAt = now;
+      void player?.seek(scrubValue, "absolute").catch(() => {});
+    }
     // Keep preview centered on the thumb while dragging.
     if (duration && duration > 0) {
       const rect = input.getBoundingClientRect();
@@ -1568,30 +1566,5 @@
      override it here for the player window only. */
   :global(body:has(.player-shell)) {
     background: transparent !important;
-  }
-
-  /* Scrubber thumb styling — cross-browser. */
-  :global(.maize-scrubber::-webkit-slider-thumb) {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 13px;
-    height: 13px;
-    border-radius: 9999px;
-    background: hsl(var(--primary));
-    cursor: pointer;
-    border: 0;
-    box-shadow: 0 0 4px rgba(0, 0, 0, 0.4);
-  }
-  :global(.maize-scrubber::-moz-range-thumb) {
-    width: 13px;
-    height: 13px;
-    border-radius: 9999px;
-    background: hsl(var(--primary));
-    cursor: pointer;
-    border: 0;
-  }
-  :global(.maize-scrubber:focus-visible) {
-    outline: 2px solid hsl(var(--primary));
-    outline-offset: 2px;
   }
 </style>
