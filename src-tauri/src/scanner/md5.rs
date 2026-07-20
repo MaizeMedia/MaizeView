@@ -12,6 +12,12 @@ use md5::{Digest, Md5};
 
 const READ_BUF: usize = 1024 * 1024;
 
+/// Lowercase hex without the `hex` crate (md-5 0.11's output type no
+/// longer implements LowerHex).
+fn hex_lower(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
 /// MD5 hex digest of the entire file (lowercase, no dashes).
 pub fn hash_file(path: &Path) -> Result<String> {
     let mut file =
@@ -27,7 +33,7 @@ pub fn hash_file(path: &Path) -> Result<String> {
         }
         hasher.update(&buf[..n]);
     }
-    Ok(format!("{:x}", hasher.finalize()))
+    Ok(hex_lower(&hasher.finalize()))
 }
 
 /// Write progress to stderr for long-running CLI backfills.
@@ -53,7 +59,7 @@ pub fn hash_file_with_progress(path: &Path, out: &mut impl Write) -> Result<Stri
             let _ = writeln!(out, "{}: md5 {}%", path.display(), pct);
         }
     }
-    Ok(format!("{:x}", hasher.finalize()))
+    Ok(hex_lower(&hasher.finalize()))
 }
 
 #[cfg(test)]
