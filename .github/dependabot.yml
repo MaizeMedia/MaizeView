@@ -17,16 +17,6 @@ updates:
     groups:
       all:
         patterns: ["*"]
-    # Hold breaking majors that need a deliberate migration PR instead of a
-    # group bump (image/rand/dirs/md-5 majors are unreviewed API
-    # changes). sqlx 0.9 landed via its own migration PR; notify deps were
-    # unused and removed outright.
-    ignore:
-      - dependency-name: "image"
-        versions: [">= 0.24"]
-      - dependency-name: "rand"
-        versions: [">= 0.10"]
-      - dependency-name: "dirs"
-        versions: [">= 6"]
-      - dependency-name: "md-5"
-        versions: [">= 0.11"]
+    # No holds: all majors migrated (sqlx 0.9, rand 0.10, dirs 6, md-5
+    # 0.11, image 0.25) or removed as unused (notify). Breaking majors get
+    # a dedicated migration PR instead of a group bump — see dev log.
