@@ -33,5 +33,3 @@ updates:
         versions: [">= 0.10"]
       - dependency-name: "dirs"
         versions: [">= 6"]
-      - dependency-name: "md-5"
-        versions: [">= 0.11"]
