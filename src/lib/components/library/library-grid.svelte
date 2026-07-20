@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Loader2, CheckSquare, ListPlus, Plus, Play, Sparkles, Trash2, Zap, X, Grid2x2 } from "@lucide/svelte";
+  import { Loader2, CheckSquare, ListPlus, Plus, Play, Sparkles, Trash2, Zap, X, Grid2x2, EyeOff } from "@lucide/svelte";
   import VirtualSceneGrid from "./virtual-scene-grid.svelte";
   import EmptyState from "$components/empty-state/empty-state.svelte";
   import ConvertDialog from "./convert-dialog.svelte";
@@ -14,6 +14,7 @@
     playlists as playlistsApi,
     scanPaths,
     scenes as scenesApi,
+    identify as identifyApi,
     openPlayerWindow,
     openQuadWithScenes,
     closeAllPlayerWindows,
@@ -198,6 +199,18 @@
     showConvert = true;
   }
 
+  async function ignoreIdentifySelection() {
+    if (library.selectionCount === 0) return;
+    const ids = [...library.selectedIds];
+    try {
+      const n = await identifyApi.setIgnore(ids, true);
+      await library.refresh();
+      showToast(`${n} scene${n === 1 ? "" : "s"} will be skipped by library-wide Identify`);
+    } catch (e) {
+      showToast(stringifyError(e));
+    }
+  }
+
   onMount(() => {
     void library.refresh();
     void library.ensureProgressListener();
@@ -284,6 +297,16 @@
                 <Sparkles class="size-3.5" />
               {/if}
               Identify
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onclick={() => void ignoreIdentifySelection()}
+              disabled={library.selectionCount === 0}
+              title="Skip the selected scenes in library-wide Identify runs (reversible per scene via the drawer)"
+            >
+              <EyeOff class="size-3.5" />
+              Ignore
             </Button>
             <Button
               size="sm"

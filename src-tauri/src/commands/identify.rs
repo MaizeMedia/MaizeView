@@ -929,6 +929,60 @@ pub async fn dismiss_stashdb_review(
     Ok(())
 }
 
+/// Batch set/clear the identify-ignore flag on a selection of scenes.
+/// Ignoring mirrors dismiss_stashdb_review's row update (minus remote-id
+/// rejects — there is no candidate list in grid context) but never rewrites
+/// title/metadata; un-ignoring mirrors clear_stashdb_ignore.
+/// Note: `stashdb_checked_at` uses COALESCE (dismiss stamps it unconditionally)
+/// so ignoring a never-checked scene doesn't fabricate a check timestamp —
+/// it stays in the stats' never_checked bucket while being excluded from
+/// pending/batch runs. Returns the number of rows updated.
+#[tauri::command]
+pub async fn batch_set_stashdb_ignore(
+    state: State<'_, AppState>,
+    scene_ids: Vec<String>,
+    ignored: bool,
+) -> Result<u64, String> {
+    let ts = now().to_rfc3339();
+    let mut updated = 0u64;
+    for id in scene_ids
+        .into_iter()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+    {
+        let res = if ignored {
+            sqlx::query(
+                r#"
+                UPDATE scenes
+                SET stashdb_match_count = 0,
+                    stashdb_ignored_at = ?,
+                    stashdb_applied_at = NULL,
+                    stashdb_remote_id = NULL,
+                    stashdb_checked_at = COALESCE(stashdb_checked_at, ?),
+                    updated_at = ?
+                WHERE id = ?
+                "#,
+            )
+            .bind(&ts)
+            .bind(&ts)
+            .bind(&ts)
+            .bind(&id)
+            .execute(&state.pool)
+            .await
+            .map_err(err)?
+        } else {
+            sqlx::query("UPDATE scenes SET stashdb_ignored_at = NULL, updated_at = ? WHERE id = ?")
+                .bind(&ts)
+                .bind(&id)
+                .execute(&state.pool)
+                .await
+                .map_err(err)?
+        };
+        updated += res.rows_affected();
+    }
+    Ok(updated)
+}
+
 async fn find_or_create_studio(pool: &SqlitePool, name: &str) -> Result<String, String> {
     let existing: Option<(String,)> =
         sqlx::query_as("SELECT id FROM studios WHERE name = ? COLLATE NOCASE")
