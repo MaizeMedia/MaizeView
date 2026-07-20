@@ -1,0 +1,21 @@
+MaizeView media-job topology bench — BASELINE
+Taken: 2026-07-16 19:48 (local)
+Topology: 3× USB-C SSD → one USB-C hub → front-panel USB-C → mobo header
+(Also C: and D: NVMe showed some activity.)
+
+Missing at start: previews=12011  phash=12072  md5=11870
+Missing at end:   previews=12001  phash=12063  md5=11865
+Window: ~60.8s
+
+Throughput:
+  previews: 10 done → 9.9/min
+  phash:     9 done → 8.9/min
+  md5:       5 done → 4.9/min
+
+Sampled disk (approx):
+  t~28s: E 63 MB/s 31% | G 51 MB/s 64% | F 45 MB/s 20% | C 43 | D 38
+  t~58s: E 50 MB/s 20% | G 47 MB/s 63% | F 50 MB/s 41% | C 41 | D 48
+  ffmpeg processes observed: ~30
+
+Note: PowerShell % Processor Time sample read 100% (unreliable vs Task Manager ~24% / 8 cores hot).
+Use file-completion rates + per-disk MB/s for comparison.

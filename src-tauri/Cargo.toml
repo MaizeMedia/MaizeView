@@ -1,0 +1,97 @@
+[package]
+name = "maizeview"
+version = "0.3.2"
+description = "MaizeView — local adult video library organizer"
+authors = ["MaizeMedia"]
+edition = "2021"
+
+[lib]
+# The `_lib` suffix is necessary to make the lib name unique and not conflict
+# with the bin name on Windows (https://github.com/rust-lang/cargo/issues/8519).
+name = "maizeview_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# Tauri
+tauri = { version = "2", features = ["protocol-asset"] }
+tauri-plugin-opener = "2"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Async runtime
+tokio = { version = "1", features = ["sync", "rt-multi-thread", "macros", "fs", "io-util"] }
+tokio-util = { version = "0.7", features = ["rt"] }
+
+# Database — bundled SQLite so there's no system dependency.
+sqlx = { version = "0.8", default-features = false, features = [
+    "runtime-tokio",
+    "sqlite",
+    "macros",
+    "migrate",
+    "chrono",
+    "uuid",
+] }
+
+# IDs & time
+uuid = { version = "1", features = ["v7", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+# Filesystem scanning
+walkdir = "2"
+notify = "7"
+notify-debouncer-full = "0.4"
+
+# Parallelism for hashing/probing
+rayon = "1"
+
+# Hashing
+md-5 = "0.10" # optional MD5 fingerprint for StashDB compat (Phase 2)
+
+# HTTP (StashDB GraphQL)
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+# pHash sprite + perceptual hash
+image = { version = "0.23", default-features = false, features = ["bmp", "jpeg", "png"] }
+
+# Errors & logging
+anyhow = "1"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Misc
+dirs = "5"
+tempfile = "3"
+tauri-plugin-dialog = "2.7.1"
+rand = "0.9"
+tauri-plugin-libmpv = "0.3.2"
+
+# Win32 quadrant child HWNDs (4Play M1 spike, commands/quad.rs).
+# raw-window-handle matches the version tauri 2 uses (same as the libmpv plugin).
+raw-window-handle = "0.6"
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Shell",
+    "Win32_Graphics_Gdi",
+] }
+
+[dev-dependencies]
+image = { version = "0.23", default-features = false, features = ["bmp", "jpeg", "png"] }
+
+[profile.release]
+# NOTE: on the dev laptop (rustc 1.97 + MSVC), the original aggressive profile
+# — `lto = true` + `codegen-units = 1` — repeatedly crashed the whole PC
+# (STATUS_ACCESS_VIOLATION in rustc during the final link, then a full reboot).
+# LTO + single-unit codegen pins all cores at 100% for minutes and maximizes
+# memory pressure. This relaxed profile (no LTO, parallel codegen, capped
+# parallelism) builds reliably with negligible runtime cost for this app,
+# which is DB/IPC-bound rather than CPU-bound. See docs/progress.md.
+opt-level = 2
+codegen-units = 16
+strip = true

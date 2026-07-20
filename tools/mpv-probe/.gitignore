@@ -1,0 +1,4 @@
+
+# mpv probe build artifacts
+target/
+*.dll

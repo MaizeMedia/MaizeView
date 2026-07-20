@@ -1,0 +1,36 @@
+---
+description: MaizeView durability — git vs local blobs; commit often; no media in git
+alwaysApply: true
+---
+
+# Storage and git (MaizeView)
+
+## Durability (thin port of publisher tiers)
+
+| Tier | Where | What belongs here |
+|------|--------|-------------------|
+| **1 — GitHub** | This repo | Code, `docs/`, rules, migrations, plans — **commit verified work often** |
+| **2 — Outside repo** | User scan paths / libraries | Actual video files — never git-add media libraries |
+| **3 — Local volatile** | Desktop NVMe, `%APPDATA%/MaizeView/` | Dev DB, thumbs cache, unlocked rebuilds — recreatable |
+
+Portable product decisions live in **git** (`docs/plan.md`, `docs/decisions.md`, `docs/progress.md`). User media stays on **their disks**.
+
+Shared publisher checklist: `publisher-config/PORTABILITY.md`. inn-roads Comfy/NAS rules **do not apply** here.
+
+## Gitignore (do not fight)
+
+- `src-tauri/lib/` — libmpv DLLs (re-fetch via setup-lib)
+- `e2e/.env`, `e2e/.data/`, Playwright reports
+- `docs/e2e-reports/*.png`
+- `.env` / secrets
+
+## Commits
+
+- Commit verified work without waiting to be asked (matches user git policy).
+- Push only when asked. Never force-push `main`.
+- Gate: `cargo check` + `npm run build`; UI → E2E smoke when practical.
+- No secrets, no DLLs, no personal library paths in commits.
+
+## “Update the docs”
+
+Update **`docs/progress.md`** (and plan/ADR if needed). Not an inn-roads `state.json` sync.

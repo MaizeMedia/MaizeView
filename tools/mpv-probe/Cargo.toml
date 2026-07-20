@@ -1,0 +1,11 @@
+[package]
+name = "mpv-probe"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "mpv-probe"
+path = "main.rs"
+
+[dependencies]
+libloading = "0.8"

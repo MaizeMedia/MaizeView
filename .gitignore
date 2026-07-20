@@ -1,0 +1,29 @@
+.DS_Store
+node_modules
+/dist
+/build
+.env
+.env.*
+!.env.example
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+# svelte-check cache
+.svelte-kit
+
+# libmpv dynamic libraries (re-fetchable via `npx tauri-plugin-libmpv-api setup-lib`).
+# libmpv-2.dll is ~94MB — too big for git. The setup script recreates this dir.
+src-tauri/lib/
+*.log
+
+# Local job logs
+regenerate-previews*.log
+e2e/.data/
+e2e/.env
+e2e/playwright-report/
+e2e/test-results/
+docs/e2e-reports/*.png
+!docs/e2e-reports/.gitkeep
+
+# Local-only operational notes (never commit)
+docs/progress.local.md
+.playwright-mcp/

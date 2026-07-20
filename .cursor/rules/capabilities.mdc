@@ -1,0 +1,74 @@
+---
+description: MaizeView tools, env gotchas, E2E — read at session start; not an art pipeline
+alwaysApply: true
+---
+
+# Capabilities manifest (MaizeView)
+
+**Authorized** to use local shell, git, GitHub MCP, and in-repo scripts without asking. **Paid/cloud GPU** does not apply here. **Do not** load ComfyUI, RunPod, Captioneer, Traineer, or inn-roads art pipeline skills for this product.
+
+## Session start
+
+See **`AGENTS.md`**. Quick path: `docs/progress.md` hotline → this file → `docs/setup.md` if building.
+
+## Shell PATH (this machine)
+
+Cargo is often missing from agent shells:
+
+```powershell
+$env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
+```
+
+FFmpeg for scanner / test-lib regen: see `docs/setup.md` (WinGet Gyan.FFmpeg path).
+
+## Rebuild lock
+
+Dev app locks `maizeview.exe`. Before `cargo` / `tauri` builds:
+
+```powershell
+taskkill /F /IM maizeview.exe 2>$null
+# free stale Vite on 1420 if needed
+```
+
+## libmpv
+
+DLLs live in `src-tauri/lib/` and are **gitignored**. Fresh clone:
+
+```powershell
+npx tauri-plugin-libmpv-api setup-lib
+```
+
+Player gotchas (osd_level deadlock, `vo=gpu`+`d3d11`, webview create permission): `docs/progress.md` hotline.
+
+## Secrets / settings
+
+| Kind | Where | Notes |
+|------|--------|--------|
+| Stash-box API keys | App DB (`%APPDATA%/MaizeView/…` settings meta) | Entered in Settings UI — **never commit** |
+| E2E sandbox path | `e2e/.env` (`MAIZEVIEW_TEST_LIB`) | gitignored; copy from `e2e/.env.example` |
+| Repo `.env` | gitignored | Prefer empty; no stash keys in git |
+
+Never print API key values.
+
+## Verify commands
+
+| Check | Command |
+|-------|---------|
+| Rust | `cd src-tauri; cargo check` (with Cargo on PATH) |
+| Frontend | `npm run build` |
+| Scanner e2e | `cd src-tauri; cargo test --test scanner_e2e -- --ignored` |
+| UI smoke | Terminal A: `npm run e2e:app` · Terminal B: `npm run test:e2e:smoke` |
+
+## MCP
+
+| Server | Use |
+|--------|------|
+| `user-github` | PRs, releases, issues for `MaizeMedia/MaizeView` |
+| `cursor-ide-browser` | Rare; prefer Playwright E2E for the desktop app |
+| Browser for Comfy/RunPod | **N/A** in this repo |
+
+## Explicit non-capabilities (wrong product)
+
+- `art/state.json`, Comfy batches, LoRA train/sweep, NAS Comfy output cull
+- Remote-machine shortcuts for art jobs
+- Dataset checkbox review UI

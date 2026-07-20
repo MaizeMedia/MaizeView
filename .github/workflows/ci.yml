@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # Repo hygiene gate: no absolute user-home paths in tracked files.
+      - run: npm run check:hygiene
+
+      # libmpv DLLs are gitignored (too large); the Rust build links them.
+      - run: npm ci
+
+      - run: npx tauri-plugin-libmpv-api setup-lib
+
+      - run: npm run build
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: cargo fmt --check
+        working-directory: src-tauri
+        run: cargo fmt --check
+
+      # Report-only for now: the codebase predates clippy enforcement.
+      # New code should keep clippy clean; tighten to -D warnings over time.
+      - name: cargo clippy (report-only)
+        working-directory: src-tauri
+        run: cargo clippy
+
+      - name: cargo test --lib
+        working-directory: src-tauri
+        run: cargo test --lib

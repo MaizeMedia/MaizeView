@@ -1,0 +1,25 @@
+MaizeView media-job topology bench — REARRANGED
+Taken: 2026-07-16 19:54 (local)
+Topology: 1× USB-C → front panel; 1× USB-C → rear; 1× USB-A 3.2 → rear
+(No shared hub for the three library SSDs.)
+
+Missing at start: previews=11995  phash=12049  md5=11855
+Missing at end:   previews=11986  phash=12040  md5=11852
+Window: ~67.6s
+
+Throughput:
+  previews: 9 done → 8.0/min
+  phash:     9 done → 8.0/min
+  md5:       3 done → 2.7/min
+
+Sampled disk (approx):
+  t~33s: E 43 MB/s | G 59 MB/s 36% | F 49 MB/s 43% | C 51 | D 10
+  t~65s: E 37 MB/s | G 40 MB/s 22% | F 37 MB/s 19% | C 40 | D 10
+  ffmpeg processes observed: ~29
+
+vs BASELINE (3× USB-C → hub → front):
+  previews 9.9 → 8.0/min  (-19%)
+  phash     8.9 → 8.0/min  (-10%)
+  md5       4.9 → 2.7/min  (-46%)
+
+Note: ~1 min samples are noisy for seek-heavy ffmpeg; treat as same ballpark unless a longer run separates them.

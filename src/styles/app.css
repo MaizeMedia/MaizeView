@@ -1,0 +1,161 @@
+@import "tailwindcss";
+
+/*
+ * MaizeView design tokens — Tailwind 4 CSS-first config.
+ * Dark theme only for now (media app). Semantic tokens follow the
+ * shadcn-svelte convention (background/foreground/primary/...) so
+ * shadcn components drop in without remapping.
+ */
+
+@theme {
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+
+  /* Radius used by shadcn components */
+  --radius: 0.625rem;
+}
+
+/* Dark palette as HSL channels (shadcn convention: bare H S L, no hsl()). */
+:root,
+.dark {
+  --background: 222 18% 8%;        /* near-black slate */
+  --foreground: 218 16% 91%;       /* off-white */
+
+  --card: 222 16% 11%;
+  --card-foreground: 218 16% 91%;
+
+  --popover: 222 18% 10%;
+  --popover-foreground: 218 16% 91%;
+
+  --primary: 41 96% 56%;           /* maize (default accent) */
+  --primary-foreground: 222 30% 10%;
+
+  --secondary: 222 14% 16%;
+  --secondary-foreground: 218 16% 91%;
+
+  --muted: 222 12% 18%;
+  --muted-foreground: 220 9% 64%;
+
+  --accent: 222 14% 20%;
+  --accent-foreground: 218 16% 91%;
+
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 98%;
+
+  --border: 222 14% 20%;
+  --input: 222 14% 20%;
+  --ring: 41 96% 56%;
+
+  /* Player overlay specifics (Phase 3) */
+  --player-scrim: 0 0% 0%;
+}
+
+/* Accent presets — only remaps primary/ring (and a soft surface tint). */
+:root[data-accent="teal"],
+.dark[data-accent="teal"] {
+  --primary: 173 58% 45%;
+  --primary-foreground: 222 30% 8%;
+  --ring: 173 58% 45%;
+  --accent: 173 25% 18%;
+}
+
+:root[data-accent="coral"],
+.dark[data-accent="coral"] {
+  --primary: 12 76% 58%;
+  --primary-foreground: 222 30% 8%;
+  --ring: 12 76% 58%;
+  --accent: 12 30% 18%;
+}
+
+:root[data-accent="slate"],
+.dark[data-accent="slate"] {
+  --primary: 210 18% 62%;
+  --primary-foreground: 222 30% 8%;
+  --ring: 210 18% 62%;
+  --accent: 210 14% 20%;
+}
+
+:root[data-accent="rose"],
+.dark[data-accent="rose"] {
+  --primary: 350 55% 58%;
+  --primary-foreground: 222 30% 8%;
+  --ring: 350 55% 58%;
+  --accent: 350 22% 18%;
+}
+
+:root[data-accent="maize"],
+.dark[data-accent="maize"] {
+  --primary: 41 96% 56%;
+  --primary-foreground: 222 30% 10%;
+  --ring: 41 96% 56%;
+  --accent: 222 14% 20%;
+}
+
+/* Map the HSL tokens onto Tailwind color utilities via @theme inline.
+   This lets classes like bg-background / text-foreground / border-border work. */
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-player-scrim: hsl(var(--player-scrim));
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+}
+
+/* Base layer */
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+  }
+
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    margin: 0;
+  }
+
+  /* Thin, dark scrollbars */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted));
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--accent));
+    background-clip: content-box;
+  }
+}
