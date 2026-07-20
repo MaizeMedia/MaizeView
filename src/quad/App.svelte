@@ -34,13 +34,16 @@
     getProperty as mpvGetProperty,
     destroy as mpvDestroy,
   } from "tauri-plugin-libmpv-api";
-  import { Volume2, Play, Pause, X, SkipBack, SkipForward, Plus, Maximize2, Minimize2 } from "@lucide/svelte";
+  import { Volume2, Play, Pause, X, SkipBack, SkipForward, Plus, Maximize2, Minimize2, Trash2, Loader2 } from "@lucide/svelte";
+  import { confirm } from "@tauri-apps/plugin-dialog";
+  import FavoriteButton from "$components/favorite-button.svelte";
   import {
     claimPlayerQueue,
     sceneFilePath,
     sceneScrubPreview,
     scenes,
     assetUrl,
+    playerSettings,
     DEFAULT_MPV_CONFIG,
   } from "$lib/api";
   import {
@@ -63,6 +66,8 @@
     timePos: number;
     duration: number;
     volume: number;
+    sceneId: string;
+    paused: boolean;
   }
 
   let panes = $state<(PaneState | null)[]>([null, null, null, null]);
@@ -208,6 +213,8 @@
       timePos: 0,
       duration: 0,
       volume,
+      sceneId,
+      paused: allPaused,
     };
     if (recordHistory) {
       // A fresh scene truncates any "future" entries left after a Prev.
@@ -297,6 +304,84 @@
     if (panes[i]?.status !== "playing") return;
     soloIndex = soloIndex === i ? null : i;
     await forEachPlaying((label, j) => mpvSetProperty("mute", soloIndex !== j, label));
+    // Bar controls target the soloed pane — refresh its favorite level.
+    if (soloIndex != null) await refreshSoloFavorite();
+  }
+
+  // ─── Soloed-pane bar controls (favorite, volume, delete) ────────────────
+  let soloFav = $state(0);
+  let deleteEnabled = $state(false);
+  let deleting = $state(false);
+
+  async function refreshSoloFavorite() {
+    const p = soloIndex != null ? panes[soloIndex] : null;
+    if (!p) return;
+    try {
+      const [meta] = await scenes.shuffleMeta([p.sceneId]);
+      soloFav = meta?.favorite ?? 0;
+    } catch {
+      soloFav = 0;
+    }
+  }
+
+  async function setSoloFavorite(next: number) {
+    const p = soloIndex != null ? panes[soloIndex] : null;
+    if (!p) return;
+    soloFav = next;
+    await scenes.setFavorite(p.sceneId, next).catch(() => {});
+  }
+
+  /** Delete the soloed pane's scene (file + library entry), then refill the pane. */
+  async function deleteSoloedScene() {
+    const i = soloIndex;
+    const p = i != null ? panes[i] : null;
+    if (i == null || !p || p.status !== "playing" || deleting) return;
+    const targetId = p.sceneId;
+    const ok = await confirm(
+      `Delete "${p.detail}" permanently?\n\nThis removes the video file from disk and from your library.`,
+      { title: "Delete video", kind: "warning", okLabel: "Delete", cancelLabel: "Cancel" },
+    );
+    if (!ok) return;
+
+    deleting = true;
+    try {
+      // Advance the pane first so its mpv releases the file handle (Windows
+      // lock), then delete. No next scene → stop the instance instead.
+      const hadNext = stagedIds.filter((id) => id !== targetId).length > 0;
+      if (hadNext) await nextPane(i);
+      else {
+        await mpvCommand("stop", [], instanceLabel(i)).catch(() => {});
+        panes[i] = null;
+        // Unsoloing must unmute the remaining panes (toggleSolo muted them).
+        await forEachPlaying((label) => mpvSetProperty("mute", false, label));
+        soloIndex = null;
+      }
+      // The pane must actually be off the target file before deleting —
+      // a failed advance (dead next file) leaves the lock in place.
+      if (panes[i]?.sceneId === targetId) {
+        throw new Error("player could not release the file — close the pane's video and try again");
+      }
+      // Windows may hold the lock briefly after mpv releases the file.
+      await new Promise((r) => setTimeout(r, 300));
+      await scenes.delete(targetId);
+      // Drop the deleted scene from the rotation bag + every pane history.
+      stagedIds = stagedIds.filter((id) => id !== targetId);
+      drawBag = drawBag.filter((id) => id !== targetId);
+      for (let j = 0; j < 4; j++) {
+        const idx = playHistory[j].indexOf(targetId);
+        if (idx >= 0) {
+          playHistory[j].splice(idx, 1);
+          if (histPos[j] >= idx) histPos[j] = Math.max(0, histPos[j] - 1);
+        }
+      }
+      // The heart now points at the newly loaded scene — refresh its level.
+      await refreshSoloFavorite();
+    } catch (e) {
+      bootError = `Delete failed: ${stringifyError(e)}`;
+      setTimeout(() => (bootError = null), 4000);
+    } finally {
+      deleting = false;
+    }
   }
 
   async function togglePauseAll() {
@@ -360,16 +445,22 @@
         if (p?.status !== "playing" || advancing[i]) return;
         advancing[i] = true;
         try {
-          const [timePos, duration, eof] = await Promise.all([
+          const [timePos, duration, eof, paused] = await Promise.all([
             mpvGetProperty<number>("time-pos", "double", instanceLabel(i)),
             mpvGetProperty<number>("duration", "double", instanceLabel(i)),
             mpvGetProperty<boolean>("eof-reached", "flag", instanceLabel(i)),
+            mpvGetProperty<boolean>("pause", "flag", instanceLabel(i)),
           ]);
           // Don't move the thumb while the user drags this pane's slider.
+          const next = { ...panes[i]! };
           if (!seeking[i] && timePos != null && duration != null) {
-            panes[i] = { ...panes[i]!, timePos, duration };
+            next.timePos = timePos;
+            next.duration = duration;
           }
-          if (eof === true && !allPaused) await advancePane(i);
+          if (paused != null) next.paused = paused;
+          panes[i] = next;
+          // EOF rotation skips paused panes (per-pane or pause-all).
+          if (eof === true && !allPaused && !next.paused) await advancePane(i);
         } catch {
           // instance gone — ignore
         } finally {
@@ -377,6 +468,16 @@
         }
       }),
     );
+  }
+
+  // Per-pane play/pause (the bar's Pause all still applies to everything).
+  async function togglePanePause(i: number) {
+    const p = panes[i];
+    if (!p || p.status !== "playing") return;
+    const next = !p.paused;
+    panes[i] = { ...p, paused: next };
+    await mpvSetProperty("pause", next, instanceLabel(i)).catch(() => {});
+    pokeControls();
   }
 
   function onKeydown(e: KeyboardEvent) {
@@ -449,6 +550,9 @@
     try {
       // 0. Reapply the last quad window size (before panes measure it).
       await restoreWindowSize();
+      // Delete-in-player is opt-in (same setting as the single player).
+      deleteEnabled =
+        (await playerSettings.get().catch(() => null))?.delete_in_player_enabled ?? false;
 
       // 1. Claim the staged queue → the whole rotation list (plays 4 at a
       //    time; EOF advances each pane through the rest). Honor the source
@@ -488,7 +592,15 @@
       //    Reuse the single-player mpv options; NO osd_level (deadlocks
       //    init), no observed properties (synthetic labels get no events).
       for (let i = 0; i < sceneIds.length; i++) {
-        panes[i] = { status: "loading", detail: "", timePos: 0, duration: 0, volume: 50 };
+        panes[i] = {
+          status: "loading",
+          detail: "",
+          timePos: 0,
+          duration: 0,
+          volume: 50,
+          sceneId: "",
+          paused: false,
+        };
         try {
           await startPane(i, sceneIds[i], parent);
         } catch (e) {
@@ -498,6 +610,8 @@
             timePos: 0,
             duration: 0,
             volume: 50,
+            sceneId: "",
+            paused: false,
           };
         }
       }
@@ -548,27 +662,6 @@
         }
       }}
     >
-      {#if soloIndex === i && panes[i]?.status === "playing"}
-        <div
-          class="absolute right-2 top-2 flex items-center gap-1.5 rounded bg-black/60 px-1.5 py-1 transition-opacity duration-300 {controlsVisible
-            ? 'opacity-100'
-            : 'pointer-events-none opacity-0'}"
-        >
-          <Volume2 class="size-3.5 text-lime-400" />
-          <input
-            type="range"
-            min="0"
-            max="100"
-            step="1"
-            class="w-24 accent-lime-400"
-            value={panes[i]!.volume}
-            aria-label="Solo volume"
-            onclick={(e) => e.stopPropagation()}
-            oninput={(e) => void onVolumeInput(i, Number(e.currentTarget.value))}
-          />
-        </div>
-      {/if}
-
       {#if panes[i] == null}
         <button
           class="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded bg-black/60 px-2 py-1 text-xs text-zinc-300 hover:text-white"
@@ -625,6 +718,18 @@
               </div>
             {/if}
           {/if}
+          <button
+            class="rounded-full bg-black/60 p-1.5 text-white transition hover:bg-white/15"
+            title={panes[i]!.paused ? "Play" : "Pause"}
+            aria-label="{panes[i]!.paused ? 'Play' : 'Pause'} Q{i + 1}"
+            onclick={() => void togglePanePause(i)}
+          >
+            {#if panes[i]!.paused}
+              <Play class="size-3.5" />
+            {:else}
+              <Pause class="size-3.5" />
+            {/if}
+          </button>
           <button
             class="rounded-full bg-black/60 p-1.5 text-white transition hover:bg-white/15 disabled:opacity-30 disabled:hover:bg-transparent"
             title="Previous scene"
@@ -699,6 +804,42 @@
   >
     <SkipForward class="size-4" /> Next all
   </button>
+  {#if soloIndex != null && panes[soloIndex]?.status === "playing"}
+    {@const solo = panes[soloIndex]!}
+    {@const si = soloIndex}
+    <span class="flex items-center gap-1.5 rounded bg-zinc-800/80 px-2 py-1" title="Soloed pane controls (Q{soloIndex + 1})">
+      <FavoriteButton level={soloFav} onChange={setSoloFavorite} size="sm" variant="overlay" />
+    </span>
+    <span class="flex items-center gap-1.5 rounded bg-zinc-800/80 px-2 py-1" title="Solo volume">
+      <Volume2 class="size-4" />
+      <input
+        type="range"
+        min="0"
+        max="100"
+        step="1"
+        class="maize-scrubber h-1.5 w-24 cursor-pointer appearance-none rounded-full bg-white/25"
+        value={solo.volume}
+        aria-label="Solo volume"
+        oninput={(e) => void onVolumeInput(si, Number(e.currentTarget.value))}
+      />
+    </span>
+    {#if deleteEnabled}
+      <button
+        class="flex items-center gap-1 rounded bg-zinc-800/80 px-2 py-1 text-red-400 hover:bg-zinc-700 disabled:opacity-40"
+        title="Delete the soloed pane's video permanently"
+        aria-label="Delete video Q{soloIndex + 1}"
+        disabled={deleting}
+        onclick={() => void deleteSoloedScene()}
+      >
+        {#if deleting}
+          <Loader2 class="size-4 animate-spin" />
+        {:else}
+          <Trash2 class="size-4" />
+        {/if}
+        Delete
+      </button>
+    {/if}
+  {/if}
   <button
     class="flex items-center gap-1 rounded bg-zinc-800/80 px-2 py-1 hover:bg-zinc-700"
     title={isFullscreen ? "Exit fullscreen (F11 / Esc)" : "Fullscreen (F11)"}

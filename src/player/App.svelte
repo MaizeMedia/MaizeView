@@ -13,7 +13,7 @@
   import { onMount, onDestroy } from "svelte";
   import { confirm } from "@tauri-apps/plugin-dialog";
   import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-  import { Play, Pause, Volume2, VolumeX, Loader2, AlertTriangle, SkipForward, SkipBack, Shuffle, Trash2, ListPlus, Plus, Bookmark, BookmarkPlus, X, Maximize2, Minimize2 } from "@lucide/svelte";
+  import { Play, Pause, Volume2, VolumeX, Loader2, AlertTriangle, SkipForward, SkipBack, Shuffle, Trash2, ListPlus, Plus, X, Maximize2, Minimize2 } from "@lucide/svelte";
   import FavoriteButton from "$components/favorite-button.svelte";
   import { cycleFavoriteLevel } from "$lib/favorite";
   import { stringifyError, fmtTime } from "$lib/utils";
@@ -158,10 +158,8 @@
   let newPlaylistName = $state("");
   let showNewPlaylistField = $state(false);
 
-  // Timed segments / bookmarks
+  // Timed segments (read-only in the player; creation lives in the scene drawer)
   let sceneSegments = $state<SceneSegment[]>([]);
-  let segmentMarkIn = $state<number | null>(null);
-  let segmentsPanelOpen = $state(false);
 
   async function loadSegments(sceneId: string) {
     try {
@@ -179,57 +177,6 @@
 
   async function seekToSegment(seg: SceneSegment) {
     await player?.seek(seg.start_sec, "absolute");
-    pokeControls();
-  }
-
-  function markSegmentIn() {
-    segmentMarkIn = effectiveTime;
-    pokeControls();
-  }
-
-  async function saveSegmentAtOut() {
-    const start = segmentMarkIn ?? effectiveTime;
-    const end = segmentMarkIn != null ? effectiveTime : null;
-    const startSec = Math.min(start, end ?? start);
-    const endSec =
-      end != null && Math.abs(end - start) >= 0.25 ? Math.max(start, end) : null;
-    const label = window.prompt(
-      endSec != null ? "Segment label (optional)" : "Bookmark label (optional)",
-      "",
-    );
-    if (label === null) {
-      // cancelled
-      return;
-    }
-    try {
-      const row = await segmentsApi.create({
-        scene_id: currentSceneId,
-        start_sec: startSec,
-        end_sec: endSec,
-        label: label.trim() || (endSec != null ? "Segment" : "Bookmark"),
-      });
-      sceneSegments = [...sceneSegments, row].sort((a, b) => a.start_sec - b.start_sec);
-      segmentMarkIn = null;
-      flashPlaylistToast(endSec != null ? "Segment saved" : "Bookmark saved");
-    } catch (e) {
-      console.warn("create segment failed", e);
-    }
-    pokeControls();
-  }
-
-  async function deleteSegment(id: string) {
-    try {
-      await segmentsApi.delete(id);
-      sceneSegments = sceneSegments.filter((s) => s.id !== id);
-    } catch (e) {
-      console.warn("delete segment failed", e);
-    }
-    pokeControls();
-  }
-
-  function toggleSegmentsPanel() {
-    segmentsPanelOpen = !segmentsPanelOpen;
-    if (segmentsPanelOpen) playlistPanelOpen = false;
     pokeControls();
   }
 
@@ -256,7 +203,6 @@
   async function togglePlaylistPanel() {
     playlistPanelOpen = !playlistPanelOpen;
     if (playlistPanelOpen) {
-      segmentsPanelOpen = false;
       await loadPlaylists();
     }
     pokeControls();
@@ -321,7 +267,6 @@
     hideTimer = setTimeout(() => {
       if (paused || phase !== "ready") return;
       controlsVisible = false;
-      segmentsPanelOpen = false;
       playlistPanelOpen = false;
       hideIgnoreUntil = Date.now() + 400;
       lastPointerX = Number.NaN;
@@ -350,7 +295,6 @@
   }
 
   function closeFloatingPanels() {
-    segmentsPanelOpen = false;
     playlistPanelOpen = false;
   }
 
@@ -658,7 +602,6 @@
     await refreshSceneDetail(sceneId);
     await loadScrubPreviewForScene(sceneId);
     await loadSegments(sceneId);
-    segmentMarkIn = null;
     return true;
   }
 
@@ -1014,7 +957,7 @@
       return;
     }
     if (e.key === "Escape") {
-      if (segmentsPanelOpen || playlistPanelOpen) {
+      if (playlistPanelOpen) {
         e.preventDefault();
         closeFloatingPanels();
         pokeControls();
@@ -1075,18 +1018,6 @@
       case "s":
       case "S":
         toggleShuffle();
-        break;
-      case "i":
-      case "I":
-        markSegmentIn();
-        break;
-      case "o":
-      case "O":
-        void saveSegmentAtOut();
-        break;
-      case "b":
-      case "B":
-        toggleSegmentsPanel();
         break;
     }
   }
@@ -1216,13 +1147,6 @@
                   }}
                 ></button>
               {/each}
-              {#if segmentMarkIn != null}
-                <div
-                  class="absolute top-1/2 z-20 h-3 w-1 -translate-x-1/2 -translate-y-1/2 rounded-sm bg-sky-400"
-                  style:left="{segmentPct(segmentMarkIn)}%"
-                  title="In: {fmtTime(segmentMarkIn)}"
-                ></div>
-              {/if}
             </div>
           {/if}
           <input
@@ -1328,102 +1252,11 @@
           {#if hasQueueNav}
             {shuffleOn ? "shuffle" : `${queueIndex + 1}/${queue.length}`} ·
           {/if}
-          space · ←/→ · ↑/↓ · m · f · F11 · i/o · b{#if hasQueueNav} · n · p · s{/if}
+          space · ←/→ · ↑/↓ · m · f · F11{#if hasQueueNav} · n · p · s{/if}
         </span>
 
         <!-- spacer -->
         <div class="flex-1"></div>
-
-        <button
-          type="button"
-          onclick={markSegmentIn}
-          aria-label="Mark segment in"
-          title="Mark in (I)"
-          class="rounded-full p-1.5 text-white transition hover:bg-white/15"
-          class:text-sky-400={segmentMarkIn != null}
-        >
-          <BookmarkPlus class="size-5" />
-        </button>
-        <button
-          type="button"
-          onclick={() => void saveSegmentAtOut()}
-          aria-label="Save segment out"
-          title={segmentMarkIn != null ? "Mark out & save (O)" : "Bookmark here (O)"}
-          class="rounded-full p-1.5 text-white transition hover:bg-white/15"
-        >
-          <Bookmark class="size-5" />
-        </button>
-
-        <div class="relative">
-          <button
-            type="button"
-            onclick={toggleSegmentsPanel}
-            aria-label="Segments"
-            title="Segments (B)"
-            class="relative rounded-full p-1.5 text-white transition hover:bg-white/15"
-            class:text-primary={segmentsPanelOpen}
-          >
-            <Bookmark class="size-5" />
-            {#if sceneSegments.length > 0}
-              <span
-                class="absolute -right-0.5 -top-0.5 min-w-3.5 rounded-full bg-amber-400 px-0.5 text-center text-[9px] font-bold leading-3.5 text-black"
-              >
-                {sceneSegments.length}
-              </span>
-            {/if}
-          </button>
-          {#if segmentsPanelOpen}
-            <div
-              class="absolute bottom-full right-0 z-40 mb-2 max-h-56 w-64 overflow-y-auto rounded-lg border border-white/15 bg-black/90 p-2 shadow-xl backdrop-blur"
-              role="dialog"
-              aria-label="Scene segments"
-            >
-              <div class="mb-1 flex items-center justify-between gap-2 px-1">
-                <span class="text-[11px] font-medium text-white/70">Segments</span>
-                <button
-                  type="button"
-                  class="rounded p-0.5 text-white/40 hover:bg-white/10 hover:text-white"
-                  aria-label="Close segments"
-                  title="Close (Esc)"
-                  onclick={closeFloatingPanels}
-                >
-                  <X class="size-3.5" />
-                </button>
-              </div>
-              {#if sceneSegments.length === 0}
-                <p class="px-1 py-1 text-xs text-white/50">
-                  Empty — I then O for a range, or O for a bookmark.
-                </p>
-              {:else}
-                <ul class="space-y-1">
-                  {#each sceneSegments as seg (seg.id)}
-                    <li class="flex items-center gap-1 rounded px-1 py-0.5 hover:bg-white/10">
-                      <button
-                        type="button"
-                        class="min-w-0 flex-1 truncate text-left text-xs text-white"
-                        onclick={() => void seekToSegment(seg)}
-                      >
-                        <span class="font-mono text-white/60">{fmtTime(seg.start_sec)}</span>
-                        {#if seg.end_sec != null}
-                          <span class="text-white/40">–{fmtTime(seg.end_sec)}</span>
-                        {/if}
-                        <span class="ml-1">{seg.label || "Untitled"}</span>
-                      </button>
-                      <button
-                        type="button"
-                        class="rounded p-1 text-white/40 hover:bg-white/10 hover:text-red-400"
-                        aria-label="Delete segment"
-                        onclick={() => void deleteSegment(seg.id)}
-                      >
-                        <Trash2 class="size-3.5" />
-                      </button>
-                    </li>
-                  {/each}
-                </ul>
-              {/if}
-            </div>
-          {/if}
-        </div>
 
         <FavoriteButton
           level={favorite}
