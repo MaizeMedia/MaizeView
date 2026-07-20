@@ -43,8 +43,6 @@ chrono = { version = "0.4", features = ["serde"] }
 
 # Filesystem scanning
 walkdir = "2"
-notify = "7"
-notify-debouncer-full = "0.4"
 
 # Parallelism for hashing/probing
 rayon = "1"
