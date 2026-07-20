@@ -48,10 +48,11 @@
     cueAtTime,
     spriteDimensions,
     scrubPreviewStyle,
+    scrubPreviewDisplaySize,
     type ScrubberCue,
   } from "$lib/scrubber-preview";
   import { shuffleWeight, weightedPickId, type ShuffleMeta } from "$lib/shuffle";
-  import { stringifyError } from "$lib/utils";
+  import { stringifyError, fmtTime } from "$lib/utils";
 
   const windowLabel = getCurrentWebviewWindow().label;
   const instanceLabel = (i: number) => `${windowLabel}-q${i}`;
@@ -96,6 +97,9 @@
   // when the cursor leaves the window (unless a seek drag is in flight).
   // The mouse cursor hides with it (standard player behavior).
   let controlsVisible = $state(true);
+  // Reactive viewport width for the hover-preview sizing (same pattern as
+  // the single player's windowWidth).
+  let innerWidth = $state(1280);
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
   function setChromeVisible(visible: boolean) {
     controlsVisible = visible;
@@ -105,11 +109,12 @@
     setChromeVisible(true);
     if (idleTimer) clearTimeout(idleTimer);
     idleTimer = setTimeout(() => {
-      if (!seeking.some(Boolean)) setChromeVisible(false);
+      // Same policy as the single player: chrome stays up while paused.
+      if (!seeking.some(Boolean) && !allPaused) setChromeVisible(false);
     }, 3000);
   }
   function hideControlsIfIdle() {
-    if (!seeking.some(Boolean)) setChromeVisible(false);
+    if (!seeking.some(Boolean) && !allPaused) setChromeVisible(false);
   }
 
   let unlistenClose: (() => void) | null = null;
@@ -244,12 +249,6 @@
     await claimWithRetry(i);
   }
 
-  function fmtTime(t: number): string {
-    if (!Number.isFinite(t) || t < 0) return "0:00";
-    const s = Math.floor(t);
-    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-  }
-
   // Live seek: the thumb updates locally every input event, and the video
   // follows throttled (150 ms); final seek lands on release. The poll leaves
   // the thumb alone via the `seeking` flag.
@@ -303,6 +302,8 @@
   async function togglePauseAll() {
     allPaused = !allPaused;
     await forEachPlaying((label) => mpvSetProperty("pause", allPaused, label));
+    // Paused keeps chrome up (single-player policy); resuming re-arms idle.
+    pokeControls();
   }
 
   // Load the next drawn scene into pane `i` (EOF rotation, manual Next,
@@ -528,6 +529,8 @@
      panes (fewer than 4 staged) get an opaque fill so they don't show the
      desktop through the transparent window. Nested inputs stop propagation
      so slider drags don't toggle solo. -->
+<svelte:window bind:innerWidth />
+
 <div class="fixed inset-0 grid grid-cols-2 grid-rows-2">
   {#each [0, 1, 2, 3] as i}
     <div
@@ -601,15 +604,17 @@
             {@const cue = cueAtTime(previewCues[i], previewHover[i]!.t)}
             {#if cue}
               {@const dims = spriteDimensions(previewCues[i])}
+              {@const size = scrubPreviewDisplaySize(Math.round(innerWidth / 2))}
               <div
                 class="pointer-events-none absolute bottom-7 z-20 rounded border border-zinc-700 shadow-lg"
-                style="left: max(0px, min(calc(100% - 168px), {previewHover[i]!.x - 84}px)); {scrubPreviewStyle(
+                style="left: max(0px, min(calc(100% - {size.width + 8}px), {previewHover[i]!.x -
+                  size.width / 2}px)); {scrubPreviewStyle(
                   previewUrls[i]!,
                   cue,
                   dims.width,
                   dims.height,
-                  160,
-                  90,
+                  size.width,
+                  size.height,
                 )}"
               >
                 <span
@@ -621,7 +626,7 @@
             {/if}
           {/if}
           <button
-            class="rounded bg-black/60 p-1 text-zinc-300 hover:text-white disabled:opacity-40"
+            class="rounded-full bg-black/60 p-1.5 text-white transition hover:bg-white/15 disabled:opacity-30 disabled:hover:bg-transparent"
             title="Previous scene"
             aria-label="Previous scene Q{i + 1}"
             disabled={histPos[i] === 0}
@@ -634,7 +639,14 @@
             min="0"
             max={Math.max(panes[i]!.duration, 1)}
             step="0.1"
-            class="min-w-0 flex-1 accent-lime-400"
+            class="maize-scrubber h-1.5 min-w-0 flex-1 cursor-pointer appearance-none rounded-full bg-white/25"
+            style="background: linear-gradient(to right, hsl(var(--primary)) {Math.min(
+                1,
+                panes[i]!.timePos / Math.max(panes[i]!.duration, 1),
+              ) * 100}%, rgba(255,255,255,0.25) {Math.min(
+                1,
+                panes[i]!.timePos / Math.max(panes[i]!.duration, 1),
+              ) * 100}%);"
             value={panes[i]!.timePos}
             aria-label="Seek Q{i + 1}"
             onpointerdown={() => (seeking[i] = true)}
@@ -644,7 +656,7 @@
             onchange={(e) => void onSeekCommit(i, Number(e.currentTarget.value))}
           />
           <button
-            class="rounded bg-black/60 p-1 text-zinc-300 hover:text-white"
+            class="rounded-full bg-black/60 p-1.5 text-white transition hover:bg-white/15"
             title="Next scene"
             aria-label="Next scene Q{i + 1}"
             onclick={() => void nextPane(i)}

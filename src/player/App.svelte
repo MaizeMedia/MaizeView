@@ -16,7 +16,7 @@
   import { Play, Pause, Volume2, VolumeX, Loader2, AlertTriangle, SkipForward, SkipBack, Shuffle, Trash2, ListPlus, Plus, Bookmark, BookmarkPlus, X, Maximize2, Minimize2 } from "@lucide/svelte";
   import FavoriteButton from "$components/favorite-button.svelte";
   import { cycleFavoriteLevel } from "$lib/favorite";
-  import { stringifyError } from "$lib/utils";
+  import { stringifyError, fmtTime } from "$lib/utils";
   import {
     sessionCooldownSize,
     shuffleWeight,
@@ -300,16 +300,6 @@
   const progress = $derived(
     duration && duration > 0 ? Math.min(1, effectiveTime / duration) : 0,
   );
-
-  function fmtTime(s: number): string {
-    if (!isFinite(s) || s < 0) s = 0;
-    const h = Math.floor(s / 3600);
-    const m = Math.floor((s % 3600) / 60);
-    const sec = Math.floor(s % 60);
-    return h > 0
-      ? `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`
-      : `${m}:${String(sec).padStart(2, "0")}`;
-  }
 
   // ─── overlay auto-hide ──────────────────────────────────────────────────
   // Transparent WebView2 passes events through fully-clear pixels to mpv, so
@@ -1576,30 +1566,5 @@
      override it here for the player window only. */
   :global(body:has(.player-shell)) {
     background: transparent !important;
-  }
-
-  /* Scrubber thumb styling — cross-browser. */
-  :global(.maize-scrubber::-webkit-slider-thumb) {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 13px;
-    height: 13px;
-    border-radius: 9999px;
-    background: hsl(var(--primary));
-    cursor: pointer;
-    border: 0;
-    box-shadow: 0 0 4px rgba(0, 0, 0, 0.4);
-  }
-  :global(.maize-scrubber::-moz-range-thumb) {
-    width: 13px;
-    height: 13px;
-    border-radius: 9999px;
-    background: hsl(var(--primary));
-    cursor: pointer;
-    border: 0;
-  }
-  :global(.maize-scrubber:focus-visible) {
-    outline: 2px solid hsl(var(--primary));
-    outline-offset: 2px;
   }
 </style>
