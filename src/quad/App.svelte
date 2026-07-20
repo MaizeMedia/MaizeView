@@ -68,6 +68,7 @@
     volume: number;
     sceneId: string;
     paused: boolean;
+    favorite: number;
   }
 
   let panes = $state<(PaneState | null)[]>([null, null, null, null]);
@@ -207,6 +208,13 @@
     await mpvSetProperty("pause", allPaused, label);
     await mpvSetProperty("mute", soloIndex !== i, label);
     await mpvSetProperty("volume", volume, label);
+    let favorite = 0;
+    try {
+      const [meta] = await scenes.shuffleMeta([sceneId]);
+      favorite = meta?.favorite ?? 0;
+    } catch {
+      // favorite display is a nicety
+    }
     panes[i] = {
       status: "playing",
       detail: path.split(/[\\/]/).pop() ?? path,
@@ -215,6 +223,7 @@
       volume,
       sceneId,
       paused: allPaused,
+      favorite,
     };
     if (recordHistory) {
       // A fresh scene truncates any "future" entries left after a Prev.
@@ -304,38 +313,23 @@
     if (panes[i]?.status !== "playing") return;
     soloIndex = soloIndex === i ? null : i;
     await forEachPlaying((label, j) => mpvSetProperty("mute", soloIndex !== j, label));
-    // Bar controls target the soloed pane — refresh its favorite level.
-    if (soloIndex != null) await refreshSoloFavorite();
   }
 
-  // ─── Soloed-pane bar controls (favorite, volume, delete) ────────────────
-  let soloFav = $state(0);
+  // ─── Per-pane controls (favorite, delete) ───────────────────────────────
   let deleteEnabled = $state(false);
   let deleting = $state(false);
 
-  async function refreshSoloFavorite() {
-    const p = soloIndex != null ? panes[soloIndex] : null;
-    if (!p) return;
-    try {
-      const [meta] = await scenes.shuffleMeta([p.sceneId]);
-      soloFav = meta?.favorite ?? 0;
-    } catch {
-      soloFav = 0;
-    }
-  }
-
-  async function setSoloFavorite(next: number) {
-    const p = soloIndex != null ? panes[soloIndex] : null;
-    if (!p) return;
-    soloFav = next;
+  async function setPaneFavorite(i: number, next: number) {
+    const p = panes[i];
+    if (!p || p.status !== "playing") return;
+    panes[i] = { ...p, favorite: next };
     await scenes.setFavorite(p.sceneId, next).catch(() => {});
   }
 
-  /** Delete the soloed pane's scene (file + library entry), then refill the pane. */
-  async function deleteSoloedScene() {
-    const i = soloIndex;
-    const p = i != null ? panes[i] : null;
-    if (i == null || !p || p.status !== "playing" || deleting) return;
+  /** Delete pane `i`'s scene (file + library entry), then refill the pane. */
+  async function deletePaneScene(i: number) {
+    const p = panes[i];
+    if (!p || p.status !== "playing" || deleting) return;
     const targetId = p.sceneId;
     const ok = await confirm(
       `Delete "${p.detail}" permanently?\n\nThis removes the video file from disk and from your library.`,
@@ -352,9 +346,11 @@
       else {
         await mpvCommand("stop", [], instanceLabel(i)).catch(() => {});
         panes[i] = null;
-        // Unsoloing must unmute the remaining panes (toggleSolo muted them).
-        await forEachPlaying((label) => mpvSetProperty("mute", false, label));
-        soloIndex = null;
+        // Deleting the soloed pane must unmute the rest (toggleSolo muted them).
+        if (soloIndex === i) {
+          await forEachPlaying((label) => mpvSetProperty("mute", false, label));
+          soloIndex = null;
+        }
       }
       // The pane must actually be off the target file before deleting —
       // a failed advance (dead next file) leaves the lock in place.
@@ -374,8 +370,6 @@
           if (histPos[j] >= idx) histPos[j] = Math.max(0, histPos[j] - 1);
         }
       }
-      // The heart now points at the newly loaded scene — refresh its level.
-      await refreshSoloFavorite();
     } catch (e) {
       bootError = `Delete failed: ${stringifyError(e)}`;
       setTimeout(() => (bootError = null), 4000);
@@ -600,6 +594,7 @@
           volume: 50,
           sceneId: "",
           paused: false,
+          favorite: 0,
         };
         try {
           await startPane(i, sceneIds[i], parent);
@@ -612,6 +607,7 @@
             volume: 50,
             sceneId: "",
             paused: false,
+            favorite: 0,
           };
         }
       }
@@ -719,6 +715,15 @@
             {/if}
           {/if}
           <button
+            class="rounded-full bg-black/60 p-1.5 text-white transition hover:bg-white/15 disabled:opacity-30 disabled:hover:bg-transparent"
+            title="Previous scene"
+            aria-label="Previous scene Q{i + 1}"
+            disabled={histPos[i] === 0}
+            onclick={() => void prevPane(i)}
+          >
+            <SkipBack class="size-3.5" />
+          </button>
+          <button
             class="rounded-full bg-black/60 p-1.5 text-white transition hover:bg-white/15"
             title={panes[i]!.paused ? "Play" : "Pause"}
             aria-label="{panes[i]!.paused ? 'Play' : 'Pause'} Q{i + 1}"
@@ -731,13 +736,12 @@
             {/if}
           </button>
           <button
-            class="rounded-full bg-black/60 p-1.5 text-white transition hover:bg-white/15 disabled:opacity-30 disabled:hover:bg-transparent"
-            title="Previous scene"
-            aria-label="Previous scene Q{i + 1}"
-            disabled={histPos[i] === 0}
-            onclick={() => void prevPane(i)}
+            class="rounded-full bg-black/60 p-1.5 text-white transition hover:bg-white/15"
+            title="Next scene"
+            aria-label="Next scene Q{i + 1}"
+            onclick={() => void nextPane(i)}
           >
-            <SkipBack class="size-3.5" />
+            <SkipForward class="size-3.5" />
           </button>
           <input
             type="range"
@@ -760,17 +764,31 @@
             oninput={(e) => onSeekInput(i, Number(e.currentTarget.value))}
             onchange={(e) => void onSeekCommit(i, Number(e.currentTarget.value))}
           />
-          <button
-            class="rounded-full bg-black/60 p-1.5 text-white transition hover:bg-white/15"
-            title="Next scene"
-            aria-label="Next scene Q{i + 1}"
-            onclick={() => void nextPane(i)}
-          >
-            <SkipForward class="size-3.5" />
-          </button>
           <span class="shrink-0 rounded bg-black/60 px-1.5 py-0.5 font-mono text-[10px] text-zinc-200">
             {fmtTime(panes[i]!.timePos)} / {fmtTime(panes[i]!.duration)}
           </span>
+          <FavoriteButton
+            level={panes[i]!.favorite}
+            onChange={(next) => setPaneFavorite(i, next)}
+            size="sm"
+            variant="overlay"
+            class="rounded-full bg-black/60 p-1.5 transition hover:bg-white/15"
+          />
+          {#if deleteEnabled}
+            <button
+              class="rounded-full bg-black/60 p-1.5 text-red-400 transition hover:bg-white/15 disabled:opacity-40"
+              title="Delete this video permanently"
+              aria-label="Delete video Q{i + 1}"
+              disabled={deleting}
+              onclick={() => void deletePaneScene(i)}
+            >
+              {#if deleting}
+                <Loader2 class="size-3.5 animate-spin" />
+              {:else}
+                <Trash2 class="size-3.5" />
+              {/if}
+            </button>
+          {/if}
         </div>
       {/if}
     </div>
@@ -807,10 +825,7 @@
   {#if soloIndex != null && panes[soloIndex]?.status === "playing"}
     {@const solo = panes[soloIndex]!}
     {@const si = soloIndex}
-    <span class="flex items-center gap-1.5 rounded bg-zinc-800/80 px-2 py-1" title="Soloed pane controls (Q{soloIndex + 1})">
-      <FavoriteButton level={soloFav} onChange={setSoloFavorite} size="sm" variant="overlay" />
-    </span>
-    <span class="flex items-center gap-1.5 rounded bg-zinc-800/80 px-2 py-1" title="Solo volume">
+    <span class="flex items-center gap-1.5 rounded bg-zinc-800/80 px-2 py-1" title="Solo volume (Q{si + 1})">
       <Volume2 class="size-4" />
       <input
         type="range"
@@ -823,22 +838,6 @@
         oninput={(e) => void onVolumeInput(si, Number(e.currentTarget.value))}
       />
     </span>
-    {#if deleteEnabled}
-      <button
-        class="flex items-center gap-1 rounded bg-zinc-800/80 px-2 py-1 text-red-400 hover:bg-zinc-700 disabled:opacity-40"
-        title="Delete the soloed pane's video permanently"
-        aria-label="Delete video Q{soloIndex + 1}"
-        disabled={deleting}
-        onclick={() => void deleteSoloedScene()}
-      >
-        {#if deleting}
-          <Loader2 class="size-4 animate-spin" />
-        {:else}
-          <Trash2 class="size-4" />
-        {/if}
-        Delete
-      </button>
-    {/if}
   {/if}
   <button
     class="flex items-center gap-1 rounded bg-zinc-800/80 px-2 py-1 hover:bg-zinc-700"
