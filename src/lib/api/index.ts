@@ -530,6 +530,9 @@ export const identify = {
     }),
   batch: (sceneIds: string[], autoApply: boolean) =>
     invoke<void>("batch_identify_scenes", { sceneIds, autoApply }),
+  /** Batch set/clear the identify-ignore flag on a selection. */
+  setIgnore: (sceneIds: string[], ignored: boolean) =>
+    invoke<number>("batch_set_stashdb_ignore", { sceneIds, ignored }),
   batchLibrary: (options: BatchIdentifyLibraryOptions) =>
     invoke<StashDbIdentifyStats>("batch_identify_library", { options }),
   stats: (skipWithinDays: number, forceRescan: boolean) =>
