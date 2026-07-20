@@ -29,8 +29,6 @@ updates:
         versions: [">= 0.5"]
       - dependency-name: "image"
         versions: [">= 0.24"]
-      - dependency-name: "rand"
-        versions: [">= 0.10"]
       - dependency-name: "dirs"
         versions: [">= 6"]
       - dependency-name: "md-5"

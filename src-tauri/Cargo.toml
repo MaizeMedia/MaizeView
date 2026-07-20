@@ -68,7 +68,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 dirs = "5"
 tempfile = "3"
 tauri-plugin-dialog = "2.7.1"
-rand = "0.9"
+rand = "0.10"
 tauri-plugin-libmpv = "0.3.2"
 
 # Win32 quadrant child HWNDs (4Play M1 spike, commands/quad.rs).

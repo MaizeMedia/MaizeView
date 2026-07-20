@@ -4,7 +4,7 @@
 
 use tauri::{AppHandle, Emitter, State};
 
-use rand::Rng;
+use rand::RngExt;
 
 use crate::{
     commands::{err, scenes::SceneGridRow},
