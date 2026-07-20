@@ -56,7 +56,7 @@ md-5 = "0.10" # optional MD5 fingerprint for StashDB compat (Phase 2)
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 # pHash sprite + perceptual hash
-image = { version = "0.23", default-features = false, features = ["bmp", "jpeg", "png"] }
+image = { version = "0.25", default-features = false, features = ["bmp", "jpeg", "png"] }
 
 # Errors & logging
 anyhow = "1"
@@ -82,7 +82,7 @@ windows-sys = { version = "0.61", features = [
 ] }
 
 [dev-dependencies]
-image = { version = "0.23", default-features = false, features = ["bmp", "jpeg", "png"] }
+image = { version = "0.25", default-features = false, features = ["bmp", "jpeg", "png"] }
 
 [profile.release]
 # NOTE: on the dev laptop (rustc 1.97 + MSVC), the original aggressive profile
