@@ -4,7 +4,7 @@
 use tauri::{Emitter, State};
 
 use crate::{
-    commands::err,
+    commands::{batch_identify::NEEDS_REVIEW_WHERE, err},
     models::{Scene, VideoFile},
     AppState,
 };
@@ -227,9 +227,7 @@ fn build_list_scenes_filter(args: &ListScenesArgs) -> ListScenesFilter {
         where_sql.push_str(" AND s.stashdb_applied_at IS NOT NULL\n");
     }
     if args.needs_review_only.unwrap_or(false) {
-        where_sql.push_str(
-            " AND s.stashdb_match_count IS NOT NULL AND s.stashdb_match_count > 1 AND s.stashdb_applied_at IS NULL AND s.stashdb_ignored_at IS NULL\n",
-        );
+        where_sql.push_str(&format!(" AND {NEEDS_REVIEW_WHERE}\n"));
     }
     let min_tags = match args.min_tag_count {
         Some(n) if n > 0 => n,

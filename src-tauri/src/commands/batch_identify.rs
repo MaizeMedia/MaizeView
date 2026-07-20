@@ -61,6 +61,15 @@ fn cutoff_rfc3339(within_days: u32) -> Option<String> {
     Some((Utc::now() - Duration::days(within_days as i64)).to_rfc3339())
 }
 
+/// The canonical needs-review predicate, shared by the stats count
+/// (batch_identify) and the library list filter (scenes.rs). Deliberately
+/// has NO has-file clause: a scene needing review still needs it while its
+/// drive is offline, and the filtered list shows those scenes too — the
+/// counts must agree. (HAS_FILE stays on the job-selection queries, since
+/// identify can only run on files that exist.)
+pub(crate) const NEEDS_REVIEW_WHERE: &str =
+    "stashdb_match_count > 1 AND stashdb_applied_at IS NULL AND stashdb_ignored_at IS NULL";
+
 /// Scenes eligible for a library-wide identify run (must still have a file).
 pub(crate) async fn select_library_identify_scene_ids(
     pool: &sqlx::SqlitePool,
@@ -146,10 +155,7 @@ pub(crate) async fn stashdb_identify_stats_inner(
     let needs_review: i64 = sqlx::query_scalar(&format!(
         r#"
         SELECT COUNT(*) FROM scenes
-        WHERE {HAS_FILE}
-          AND stashdb_match_count > 1
-          AND stashdb_applied_at IS NULL
-          AND stashdb_ignored_at IS NULL
+        WHERE {NEEDS_REVIEW_WHERE}
         "#
     ))
     .fetch_one(pool)
