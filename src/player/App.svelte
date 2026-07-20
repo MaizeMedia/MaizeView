@@ -97,6 +97,7 @@
   let hideTimer: ReturnType<typeof setTimeout> | null = null;
   let seeking = $state(false); // suppress time-pos updates while user drags scrubber
   let scrubValue = $state(0); // scrubber position while dragging
+  let lastLiveSeekAt = 0; // throttle for live seek-while-dragging
   let scrubHoverTime = $state<number | null>(null);
   let scrubHoverX = $state(0); // px from left of scrub track
   let scrubPreviewSpriteUrl = $state<string | null>(null);
@@ -381,6 +382,13 @@
   function onScrubInput(e: Event) {
     const input = e.currentTarget as HTMLInputElement;
     scrubValue = Number(input.value);
+    // Live seek: video follows the drag (throttled 150 ms; the exact seek
+    // lands on commit, same as the 4Play per-pane scrubbers).
+    const now = Date.now();
+    if (now - lastLiveSeekAt >= 150) {
+      lastLiveSeekAt = now;
+      void player?.seek(scrubValue, "absolute").catch(() => {});
+    }
     // Keep preview centered on the thumb while dragging.
     if (duration && duration > 0) {
       const rect = input.getBoundingClientRect();
