@@ -38,7 +38,8 @@
 
 `main` is protected: `enforce_admins` + required `build-test` CI. **Nothing lands without a PR the owner explicitly merges.**
 - Own work: branch → commit → `gh pr create`. Never push to `main` directly (it's rejected).
-- **Independent review:** for any non-trivial PR — ours or external — run a review subagent with **fresh context** (it has not seen the implementation; it reviews the raw diff cold) covering correctness, security, secrets, repo hygiene (above), ADR compliance (`docs/decisions.md`), and test coverage. Post its findings as the PR review. Trivial docs-only fixes may skip it.
+- **Granularity (owner's call, 2026-07-20):** coherent-batch PRs, not micro-PRs — one PR per theme or work session (e.g. an audit-fix batch lands as one PR with several commits). Single-maintainer repo: the PR exists as the pre-public checkpoint (hygiene gate, CI, owner review), not for external review throughput. Split only when a change mixes unrelated concerns.
+- **Independent review:** required for PRs touching schema/migrations, Tauri commands/IPC, release/CI config, or dependency upgrades — run a review subagent with **fresh context** (it has not seen the implementation; it reviews the raw diff cold) covering correctness, security, secrets, repo hygiene (above), ADR compliance (`docs/decisions.md`), and test coverage. Post its findings as the PR review. UI-only and docs-only PRs may skip it.
 - Merge is the owner's call, always.
 
 ## Handoff phrase
