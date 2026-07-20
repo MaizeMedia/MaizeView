@@ -82,9 +82,9 @@ pub(crate) async fn select_library_identify_scene_ids(
     const NOT_IGNORED: &str = "stashdb_ignored_at IS NULL";
 
     if force_rescan {
-        return sqlx::query_scalar(&format!(
+        return sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
             "SELECT id FROM scenes WHERE {HAS_FILE} AND {NOT_IGNORED} ORDER BY created_at DESC"
-        ))
+        )))
         .fetch_all(pool)
         .await
         .map_err(crate::commands::err);
@@ -92,7 +92,7 @@ pub(crate) async fn select_library_identify_scene_ids(
 
     let cutoff = cutoff_rfc3339(skip_within_days);
     if let Some(cutoff) = cutoff {
-        sqlx::query_scalar(&format!(
+        sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
             r#"
             SELECT id FROM scenes
             WHERE {HAS_FILE}
@@ -100,15 +100,15 @@ pub(crate) async fn select_library_identify_scene_ids(
               AND (stashdb_checked_at IS NULL OR stashdb_checked_at < ?)
             ORDER BY created_at DESC
             "#
-        ))
+        )))
         .bind(cutoff)
         .fetch_all(pool)
         .await
         .map_err(crate::commands::err)
     } else {
-        sqlx::query_scalar(&format!(
+        sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
             "SELECT id FROM scenes WHERE {HAS_FILE} AND {NOT_IGNORED} ORDER BY created_at DESC"
-        ))
+        )))
         .fetch_all(pool)
         .await
         .map_err(crate::commands::err)
@@ -122,15 +122,16 @@ pub(crate) async fn stashdb_identify_stats_inner(
 ) -> Result<StashDbIdentifyStats, String> {
     const HAS_FILE: &str = "EXISTS (SELECT 1 FROM files f WHERE f.scene_id = scenes.id)";
 
-    let total_scenes: i64 =
-        sqlx::query_scalar(&format!("SELECT COUNT(*) FROM scenes WHERE {HAS_FILE}"))
-            .fetch_one(pool)
-            .await
-            .map_err(crate::commands::err)?;
+    let total_scenes: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+        "SELECT COUNT(*) FROM scenes WHERE {HAS_FILE}"
+    )))
+    .fetch_one(pool)
+    .await
+    .map_err(crate::commands::err)?;
 
-    let never_checked: i64 = sqlx::query_scalar(&format!(
+    let never_checked: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
         "SELECT COUNT(*) FROM scenes WHERE {HAS_FILE} AND stashdb_checked_at IS NULL"
-    ))
+    )))
     .fetch_one(pool)
     .await
     .map_err(crate::commands::err)?;
@@ -138,9 +139,9 @@ pub(crate) async fn stashdb_identify_stats_inner(
     let checked_recently = if force_rescan {
         0
     } else if let Some(cutoff) = cutoff_rfc3339(skip_within_days) {
-        sqlx::query_scalar(&format!(
+        sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
             "SELECT COUNT(*) FROM scenes WHERE {HAS_FILE} AND stashdb_checked_at IS NOT NULL AND stashdb_checked_at >= ?"
-        ))
+        )))
         .bind(cutoff)
         .fetch_one(pool)
         .await
@@ -152,12 +153,12 @@ pub(crate) async fn stashdb_identify_stats_inner(
     let pending_ids =
         select_library_identify_scene_ids(pool, skip_within_days, force_rescan).await?;
 
-    let needs_review: i64 = sqlx::query_scalar(&format!(
+    let needs_review: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
         r#"
         SELECT COUNT(*) FROM scenes
         WHERE {NEEDS_REVIEW_WHERE}
         "#
-    ))
+    )))
     .fetch_one(pool)
     .await
     .map_err(crate::commands::err)?;

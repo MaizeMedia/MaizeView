@@ -417,7 +417,7 @@ pub async fn list_scenes(
     LIMIT ? OFFSET ?"#,
         filter.where_sql
     );
-    let mut select_q = sqlx::query_as::<_, SceneGridRowWithTotal>(&select_sql)
+    let mut select_q = sqlx::query_as::<_, SceneGridRowWithTotal>(sqlx::AssertSqlSafe(select_sql))
         .bind(filter.min_fav)
         .bind(filter.fav_filter);
     for b in &filter.binds {
@@ -664,7 +664,7 @@ pub async fn scenes_shuffle_meta(
             .join(",");
         let sql =
             format!("SELECT id, favorite, last_played_at FROM scenes WHERE id IN ({placeholders})");
-        let mut q = sqlx::query_as::<_, SceneShuffleMeta>(&sql);
+        let mut q = sqlx::query_as::<_, SceneShuffleMeta>(sqlx::AssertSqlSafe(sql));
         for id in chunk {
             q = q.bind(id);
         }
