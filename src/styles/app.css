@@ -159,3 +159,28 @@
     background-clip: content-box;
   }
 }
+
+/* Scrubber thumb styling — shared by the single player and 4Play strips. */
+.maize-scrubber::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 9999px;
+  background: hsl(var(--primary));
+  cursor: pointer;
+  border: 0;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.4);
+}
+.maize-scrubber::-moz-range-thumb {
+  width: 13px;
+  height: 13px;
+  border-radius: 9999px;
+  background: hsl(var(--primary));
+  cursor: pointer;
+  border: 0;
+}
+.maize-scrubber:focus-visible {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 2px;
+}
