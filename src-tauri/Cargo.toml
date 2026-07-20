@@ -48,13 +48,13 @@ walkdir = "2"
 rayon = "1"
 
 # Hashing
-md-5 = "0.10" # optional MD5 fingerprint for StashDB compat (Phase 2)
+md-5 = "0.11" # optional MD5 fingerprint for StashDB compat (Phase 2)
 
 # HTTP (StashDB GraphQL)
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 # pHash sprite + perceptual hash
-image = { version = "0.23", default-features = false, features = ["bmp", "jpeg", "png"] }
+image = { version = "0.25", default-features = false, features = ["bmp", "jpeg", "png"] }
 
 # Errors & logging
 anyhow = "1"
@@ -63,10 +63,10 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Misc
-dirs = "5"
+dirs = "6"
 tempfile = "3"
 tauri-plugin-dialog = "2.7.1"
-rand = "0.9"
+rand = "0.10"
 tauri-plugin-libmpv = "0.3.2"
 
 # Win32 quadrant child HWNDs (4Play M1 spike, commands/quad.rs).
@@ -80,7 +80,7 @@ windows-sys = { version = "0.61", features = [
 ] }
 
 [dev-dependencies]
-image = { version = "0.23", default-features = false, features = ["bmp", "jpeg", "png"] }
+image = { version = "0.25", default-features = false, features = ["bmp", "jpeg", "png"] }
 
 [profile.release]
 # NOTE: on the dev laptop (rustc 1.97 + MSVC), the original aggressive profile
