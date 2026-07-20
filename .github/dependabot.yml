@@ -18,11 +18,9 @@ updates:
       all:
         patterns: ["*"]
     # Hold breaking majors that need a deliberate migration PR instead of a
-    # group bump (see closed PR #2 — sqlx 0.9's AssertSqlSafe gate broke the
-    # build; notify/image/rand/dirs/md-5 majors are unreviewed API changes).
+    # group bump (notify/image/rand/dirs/md-5 majors are unreviewed API
+    # changes). sqlx 0.9 landed via its own migration PR.
     ignore:
-      - dependency-name: "sqlx"
-        versions: [">= 0.9"]
       - dependency-name: "notify"
         versions: [">= 8"]
       - dependency-name: "notify-debouncer-full"
