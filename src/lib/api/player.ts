@@ -20,10 +20,8 @@ import {
   setProperty as mpvSetProperty,
   getProperty as mpvGetProperty,
   observeProperties as mpvObserve,
-  listenEvents as mpvListenEvents,
   destroy as mpvDestroy,
   type MpvConfig,
-  type MpvEvent,
   type MpvEventFromProperties,
   type MpvFormat,
   type MpvObservableProperty,
@@ -282,7 +280,6 @@ export const PLAYER_OBSERVED_PROPERTIES = [
 
 export type PlayerObservedProperty = (typeof PLAYER_OBSERVED_PROPERTIES)[number];
 export type PlayerObservedEvent = MpvEventFromProperties<PlayerObservedProperty>;
-export type PlayerEvent = MpvEvent;
 
 /**
  * Default mpv config per ADR-005 / ADR-012.
@@ -336,8 +333,6 @@ export const DEFAULT_MPV_CONFIG: MpvConfig = {
 export interface PlayerHandle {
   /** Observe mpv property changes (pause, time-pos, hwdec, …). Returns unlisten. */
   onPropertyChange: (cb: (e: PlayerObservedEvent) => void) => Promise<MpvUnlisten>;
-  /** Listen to all raw mpv events (file-loaded, end-file, errors, …). Diagnostic. */
-  onEvent: (cb: (e: PlayerEvent) => void) => Promise<MpvUnlisten>;
   /** Load a file by absolute path. Replaces the current playlist entry. */
   loadFile: (path: string) => Promise<void>;
   /** Toggle pause. */
@@ -370,8 +365,6 @@ export async function createPlayer(config: MpvConfig = DEFAULT_MPV_CONFIG): Prom
 
   return {
     onPropertyChange: (cb) => mpvObserve(PLAYER_OBSERVED_PROPERTIES, cb),
-
-    onEvent: (cb) => mpvListenEvents(cb),
 
     loadFile: (path) => mpvCommand("loadfile", [path]),
 

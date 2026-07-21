@@ -66,20 +66,9 @@ class CatalogsStore {
     return row;
   }
 
-  async deletePerformer(id: string): Promise<void> {
-    await performersApi.delete(id);
-    this.performers = this.performers.filter((p) => p.id !== id);
-  }
-
-  async createStudio(name: string): Promise<StudioRow> {
-    const row = await studiosApi.create(name);
-    this.studios = [...this.studios.filter((s) => s.id !== row.id), row].sort(
-      byName,
-    );
-    return row;
-  }
-
-  // The API exposes no studios.delete, so there is no deleteStudio helper.
+  // No deletePerformer/createStudio helpers — nothing calls them today
+  // (studios/performers are created server-side via identify flows; those
+  // callers use catalogs.refresh() after apply). Re-add when a UI needs them.
 }
 
 export const catalogs = new CatalogsStore();

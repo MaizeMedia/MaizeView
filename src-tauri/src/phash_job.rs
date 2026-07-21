@@ -143,6 +143,9 @@ async fn run_inner(
 
     // Fixed worker pool pulling from a shared index instead of one task per
     // file; per-drive caps still apply via the limiter inside the loop.
+    // Trade-off (accepted): rows are consumed in query order, so a long run of
+    // same-drive rows can park workers on that drive's semaphore (head-of-line
+    // blocking). Scanned_at ordering interleaves drives in practice.
     for _ in 0..workers {
         let pool = pool.clone();
         let emit = emit.clone();

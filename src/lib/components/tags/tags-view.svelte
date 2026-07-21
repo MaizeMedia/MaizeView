@@ -5,6 +5,7 @@
   import Input from "$components/ui/input/input.svelte";
   import EmptyState from "$components/empty-state/empty-state.svelte";
   import { tags as tagsApi, type TagWithCount } from "$lib/api";
+  import { catalogs } from "$lib/stores/catalogs.svelte";
   import { library } from "$lib/stores/library.svelte";
   import { stringifyError } from "$lib/utils";
 
@@ -29,7 +30,7 @@
   async function create() {
     if (!newName.trim()) return;
     try {
-      await tagsApi.create(newName.trim());
+      await catalogs.createTag(newName.trim());
       newName = "";
       creating = false;
       await load();
@@ -40,7 +41,7 @@
 
   async function remove(id: string) {
     try {
-      await tagsApi.delete(id);
+      await catalogs.deleteTag(id);
       confirmDeleteId = null;
       await load();
     } catch (e) {
