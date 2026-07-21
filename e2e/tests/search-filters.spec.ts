@@ -384,4 +384,32 @@ test.describe.serial("Search filters (curation + saved)", () => {
 
     await clearSearchAndFilters(catalogPage);
   });
+
+  test("11 unlink + strip removes tags performers studio", async ({ catalogPage }) => {
+    // scene0 still carries this run's seeded tags (A/B/C), studio, performer.
+    type Detail = { tags: unknown[]; performers: unknown[]; studio: unknown };
+    const before = await invokeCmd<Detail>(catalogPage, "scene_detail", {
+      sceneId: sceneIds[0],
+    });
+    expect(before.tags.length).toBeGreaterThan(0);
+    expect(before.performers.length).toBeGreaterThan(0);
+
+    await invokeCmd(catalogPage, "clear_stashdb_identify", {
+      sceneId: sceneIds[0],
+      opts: { ignore_future: true, clear_metadata: true, strip_links: true },
+    });
+
+    const after = await invokeCmd<Detail>(catalogPage, "scene_detail", {
+      sceneId: sceneIds[0],
+    });
+    expect(after.tags).toHaveLength(0);
+    expect(after.performers).toHaveLength(0);
+    expect(after.studio).toBeNull();
+
+    // Restore clean ignore-state for later suites.
+    await invokeCmd(catalogPage, "batch_set_stashdb_ignore", {
+      sceneIds: [sceneIds[0]],
+      ignored: false,
+    });
+  });
 });

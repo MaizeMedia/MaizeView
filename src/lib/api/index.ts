@@ -474,6 +474,8 @@ export interface IdentifySceneOpts {
 export interface ClearStashDbIdentifyInput {
   ignore_future?: boolean;
   clear_metadata?: boolean;
+  /** Also remove ALL tag + performer links (including hand-added) — wrong-link cleanup. */
+  strip_links?: boolean;
   reject_remote_id?: string | null;
   provider_id?: string | null;
 }
