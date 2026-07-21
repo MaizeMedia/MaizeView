@@ -649,6 +649,11 @@ pub struct ClearStashDbIdentifyInput {
     /// Clear title/details/cover/studio when provenance is a stash-box provider.
     #[serde(default = "default_true")]
     pub clear_metadata: bool,
+    /// Also remove ALL tag + performer links on the scene. Tags/performers have
+    /// no provenance tracking, so this strips hand-added links too — the UI
+    /// offers it only as an explicit opt-in for wrong-link cleanup.
+    #[serde(default)]
+    pub strip_links: bool,
     /// Also reject this remote id so it won't auto-apply again.
     pub reject_remote_id: Option<String>,
     pub provider_id: Option<String>,
@@ -668,6 +673,7 @@ pub async fn clear_stashdb_identify(
     let opts = opts.unwrap_or(ClearStashDbIdentifyInput {
         ignore_future: true,
         clear_metadata: true,
+        strip_links: false,
         reject_remote_id: None,
         provider_id: None,
     });
@@ -760,6 +766,21 @@ pub(crate) async fn clear_stashdb_identify_inner(
                 .await
                 .map_err(err)?;
         }
+    }
+
+    if opts.strip_links {
+        // No provenance on links — this removes every tag/performer on the
+        // scene, hand-added ones included (explicit opt-in in the UI).
+        sqlx::query("DELETE FROM scene_tags WHERE scene_id = ?")
+            .bind(scene_id)
+            .execute(pool)
+            .await
+            .map_err(err)?;
+        sqlx::query("DELETE FROM scene_performers WHERE scene_id = ?")
+            .bind(scene_id)
+            .execute(pool)
+            .await
+            .map_err(err)?;
     }
 
     let ignore_at = if opts.ignore_future {

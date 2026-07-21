@@ -563,11 +563,13 @@
     }
   }
 
-  async function unlinkStashDbIdentify() {
+  async function unlinkStashDbIdentify(stripLinks = false) {
     if (!detail) return;
     const ok = await confirm(
-      "Unlink this stash-box match?\n\n• Clears identify link and provider title/details/cover/studio\n• Blocks this remote scene from auto-applying again\n• Skips this file in future batch Identify runs\n\nPerformers/tags are left for you to remove if wrong.",
-      { title: "Unlink stash-box match", kind: "warning" },
+      stripLinks
+        ? "Unlink this stash-box match and REMOVE tags + performers?\n\n• Clears identify link and provider title/details/cover/studio\n• Removes ALL tags and performers from this scene — including any you added yourself (links have no provenance)\n• Blocks this remote scene from auto-applying again\n• Skips this file in future batch Identify runs"
+        : "Unlink this stash-box match?\n\n• Clears identify link and provider title/details/cover/studio\n• Blocks this remote scene from auto-applying again\n• Skips this file in future batch Identify runs\n\nPerformers/tags are left for you to remove if wrong.",
+      { title: stripLinks ? "Unlink + strip tags & performers" : "Unlink stash-box match", kind: "warning" },
     );
     if (!ok) return;
     clearingIdentify = true;
@@ -576,6 +578,7 @@
       await identifyApi.clear(detail.scene.id, {
         ignore_future: true,
         clear_metadata: true,
+        strip_links: stripLinks,
         reject_remote_id: detail.scene.stashdb_remote_id,
         provider_id: identifyResult?.provider_id ?? null,
       });
@@ -799,7 +802,7 @@
               <Button
                 size="sm"
                 variant="outline"
-                onclick={unlinkStashDbIdentify}
+                onclick={() => unlinkStashDbIdentify(false)}
                 disabled={clearingIdentify}
                 title="Unlink false match and skip future batch identify"
               >
@@ -807,6 +810,19 @@
                   <Loader2 class="size-3 animate-spin" />
                 {:else}
                   Unlink
+                {/if}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onclick={() => unlinkStashDbIdentify(true)}
+                disabled={clearingIdentify}
+                title="Unlink and remove ALL tags + performers (wrong-match cleanup)"
+              >
+                {#if clearingIdentify}
+                  <Loader2 class="size-3 animate-spin" />
+                {:else}
+                  Unlink + strip
                 {/if}
               </Button>
             {:else if detail.scene.stashdb_ignored_at}
