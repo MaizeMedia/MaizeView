@@ -104,6 +104,8 @@ export interface ListScenesArgs {
   needsReviewOnly?: boolean;
   /** Ignore-state filter: true = only ignored, false = only not-ignored, omit/null = any. */
   ignored?: boolean | null;
+  /** Only scenes with a file under one of these folders (recursive, ANY). */
+  folderPaths?: string[];
   /** Min primary-file height in pixels. */
   minHeight?: number;
   minPerformerCount?: number;
@@ -134,6 +136,7 @@ export interface SavedFilterPayload {
   identifiedOnly: boolean;
   needsReviewOnly: boolean;
   ignoreState: IgnoreState;
+  folderPaths: string[];
   minHeight: number | null;
   minPerformerCount: number;
 }
@@ -195,6 +198,7 @@ export const scenes = {
         identified_only: args.identifiedOnly ?? false,
         needs_review_only: args.needsReviewOnly ?? false,
         ignored: args.ignored ?? null,
+        folder_paths: args.folderPaths ?? [],
         min_height: args.minHeight ?? null,
         min_performer_count: args.minPerformerCount ?? null,
         limit: args.limit ?? LIST_SCENES_BATCH,
@@ -224,6 +228,20 @@ export const scenes = {
   /** Fired when a scene is removed (e.g. player delete). */
   onDeleted: (cb: (p: SceneDeletedEvent) => void): Promise<UnlistenFn> =>
     listen<SceneDeletedEvent>("scene://deleted", (e) => cb(e.payload)),
+};
+
+// ─── folders (library facet) ────────────────────────────────────────────
+/** A distinct immediate parent directory of library files. */
+export interface FolderRow {
+  /** Full directory path. */
+  path: string;
+  /** Last path segment, for compact display. */
+  name: string;
+  file_count: number;
+}
+
+export const folders = {
+  list: () => invoke<FolderRow[]>("list_folders"),
 };
 
 // ─── downscale / transcode ──────────────────────────────────────────────

@@ -419,6 +419,17 @@
         <X class="size-3" />
       </button>
     {/if}
+    {#each library.folderPaths as folder (folder)}
+      <button
+        type="button"
+        title={folder}
+        class="flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-xs text-primary hover:bg-primary/25"
+        onclick={() => library.toggleFolder(folder)}
+      >
+        +/{folder.split(/[\\/]/).pop() || folder}
+        <X class="size-3" />
+      </button>
+    {/each}
     {#if library.minPerformerCount > 0}
       <button
         type="button"

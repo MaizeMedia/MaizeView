@@ -46,6 +46,8 @@ class LibraryStore {
   needsReviewOnly = $state(false);
   /** Ignore-state facet: "any" (off) / "ignored" only / "not_ignored" only. */
   ignoreState = $state<IgnoreState>("any");
+  /** Folder facet: only scenes with a file under one of these dirs (recursive, ANY). */
+  folderPaths = $state<string[]>([]);
   /** null = off; e.g. 720 / 1080. */
   minHeight = $state<number | null>(null);
   minPerformerCount = $state(0);
@@ -115,6 +117,7 @@ class LibraryStore {
       identifiedOnly: this.identifiedOnly || undefined,
       needsReviewOnly: this.needsReviewOnly || undefined,
       ignored: this.ignoreState === "any" ? undefined : this.ignoreState === "ignored",
+      folderPaths: this.folderPaths.length ? this.folderPaths : undefined,
       minHeight: this.minHeight && this.minHeight > 0 ? this.minHeight : undefined,
       minPerformerCount: this.minPerformerCount > 0 ? this.minPerformerCount : undefined,
       limit: LIST_SCENES_BATCH,
@@ -142,6 +145,7 @@ class LibraryStore {
       identifiedOnly: this.identifiedOnly,
       needsReviewOnly: this.needsReviewOnly,
       ignoreState: this.ignoreState,
+      folderPaths: [...this.folderPaths],
       minHeight: this.minHeight,
       minPerformerCount: this.minPerformerCount,
     };
@@ -166,6 +170,7 @@ class LibraryStore {
     this.identifiedOnly = !!payload.identifiedOnly;
     this.needsReviewOnly = !!payload.needsReviewOnly;
     this.ignoreState = payload.ignoreState ?? "any";
+    this.folderPaths = payload.folderPaths ?? [];
     this.minHeight = payload.minHeight ?? null;
     this.minPerformerCount = payload.minPerformerCount ?? 0;
     void this.refresh();
@@ -467,6 +472,13 @@ class LibraryStore {
     void this.refresh();
   }
 
+  toggleFolder(path: string) {
+    this.folderPaths = this.folderPaths.includes(path)
+      ? this.folderPaths.filter((f) => f !== path)
+      : [...this.folderPaths, path];
+    void this.refresh();
+  }
+
   /** Jump to library filtered to stash-box multi-match scenes awaiting a pick. */
   showNeedsReview() {
     this.view = "library";
@@ -535,6 +547,7 @@ class LibraryStore {
     this.identifiedOnly = false;
     this.needsReviewOnly = false;
     this.ignoreState = "any";
+    this.folderPaths = [];
     this.minHeight = null;
     this.minPerformerCount = 0;
     void this.refresh();
@@ -557,6 +570,7 @@ class LibraryStore {
       this.identifiedOnly ||
       this.needsReviewOnly ||
       this.ignoreState !== "any" ||
+      this.folderPaths.length > 0 ||
       this.minHeight != null ||
       this.minPerformerCount > 0
     );
@@ -579,6 +593,7 @@ class LibraryStore {
       (this.identifiedOnly ? 1 : 0) +
       (this.needsReviewOnly ? 1 : 0) +
       (this.ignoreState !== "any" ? 1 : 0) +
+      (this.folderPaths.length > 0 ? 1 : 0) +
       (this.minHeight != null ? 1 : 0) +
       (this.minPerformerCount > 0 ? 1 : 0)
     );

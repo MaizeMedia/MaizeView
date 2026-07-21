@@ -117,6 +117,7 @@ pub fn run() {
             commands::scan_paths::remove_scan_path,
             // scenes / library
             commands::scenes::list_scenes,
+            commands::scenes::list_folders,
             commands::scenes::scene_counts,
             commands::scenes::backfill_scene_titles,
             commands::scenes::set_favorite,

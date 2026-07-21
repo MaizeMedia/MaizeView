@@ -1,13 +1,14 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { X, Check, Loader2, Ban } from "@lucide/svelte";
-  import { tags as tagsApi, performers as performersApi, studios as studiosApi, type IgnoreState } from "$lib/api";
+  import { tags as tagsApi, performers as performersApi, studios as studiosApi, folders as foldersApi, type FolderRow, type IgnoreState } from "$lib/api";
   import type { PerformerRow, TagRow, StudioRow } from "$lib/api/types";
   import { library } from "$lib/stores/library.svelte";
 
   let allTags = $state<TagRow[]>([]);
   let allPerformers = $state<PerformerRow[]>([]);
   let allStudios = $state<StudioRow[]>([]);
+  let allFolders = $state<FolderRow[]>([]);
   let loading = $state(true);
   let tagQuery = $state("");
   let excludeTagQuery = $state("");
@@ -15,18 +16,21 @@
   let excludePerfQuery = $state("");
   let studioQuery = $state("");
   let excludeStudioQuery = $state("");
+  let folderQuery = $state("");
 
   async function load() {
     loading = true;
     try {
-      const [t, p, s] = await Promise.all([
+      const [t, p, s, f] = await Promise.all([
         tagsApi.list(),
         performersApi.list(),
         studiosApi.list(),
+        foldersApi.list(),
       ]);
       allTags = t;
       allPerformers = p;
       allStudios = s;
+      allFolders = f;
     } finally {
       loading = false;
     }
@@ -45,6 +49,11 @@
   let filteredStudios = $derived(allStudios.filter((s) => matchesQuery(s.name, studioQuery)));
   let filteredExcludeStudios = $derived(
     allStudios.filter((s) => matchesQuery(s.name, excludeStudioQuery)),
+  );
+  let filteredFolders = $derived(
+    allFolders.filter(
+      (f) => matchesQuery(f.name, folderQuery) || matchesQuery(f.path, folderQuery),
+    ),
   );
 
   const TAG_COUNT_PRESETS = [0, 1, 3, 5, 10] as const;
@@ -382,6 +391,40 @@
                 <Ban class="size-3" />
               {/if}
               {s.name}
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </div>
+
+    <!-- Include folders -->
+    <div>
+      <div class="mb-1.5 text-xs font-medium text-muted-foreground">
+        Include folders <span class="text-muted-foreground/60">({allFolders.length})</span>
+      </div>
+      <input
+        bind:value={folderQuery}
+        placeholder="Filter folders…"
+        class="mb-2 h-7 w-full rounded-md border border-input bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      />
+      {#if filteredFolders.length === 0}
+        <p class="text-xs text-muted-foreground">No folders yet. Scan a library first.</p>
+      {:else}
+        <div class="flex max-h-28 flex-wrap gap-1.5 overflow-y-auto" data-testid="folder-facet">
+          {#each filteredFolders as f (f.path)}
+            <button
+              type="button"
+              title={f.path}
+              onclick={() => library.toggleFolder(f.path)}
+              class="flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition-colors
+                {library.folderPaths.includes(f.path)
+                ? 'border-primary bg-primary/15 text-primary'
+                : 'border-border bg-card hover:bg-accent'}"
+            >
+              {#if library.folderPaths.includes(f.path)}
+                <Check class="size-3" />
+              {/if}
+              {f.name} <span class="text-muted-foreground/70">({f.file_count})</span>
             </button>
           {/each}
         </div>

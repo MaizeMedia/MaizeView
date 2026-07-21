@@ -84,6 +84,10 @@ pub struct ListScenesArgs {
     /// Ignore-state filter: Some(true) = only ignored (`stashdb_ignored_at IS NOT
     /// NULL`), Some(false) = only not-ignored. None (or null) = no filter.
     pub ignored: Option<bool>,
+    /// Only scenes with a file under one of these folders (recursive, ANY).
+    /// Values are exact parent dirs as returned by `list_folders`.
+    #[serde(default)]
+    pub folder_paths: Vec<String>,
     /// Only scenes with these studio IDs (ANY).
     #[serde(default)]
     pub studio_ids: Vec<String>,
@@ -102,6 +106,23 @@ enum QueryBind {
     Text(String),
     Float(f64),
     Int(i64),
+}
+
+/// Escape a literal for a LIKE pattern using '!' as the escape character.
+fn like_escape(lit: &str) -> String {
+    lit.replace('!', "!!").replace('%', "!%").replace('_', "!_")
+}
+
+/// Build a LIKE pattern matching files under `folder` recursively:
+/// `E:\A\B\%` so `E:\A\B` never matches `E:\A\BC`. LIKE metachars in the
+/// folder are escaped ('!' escape char; matches the ESCAPE clause).
+fn folder_like_prefix(folder: &str) -> String {
+    let mut prefix = like_escape(folder);
+    if !prefix.ends_with(['\\', '/']) {
+        prefix.push('\\');
+    }
+    prefix.push('%');
+    prefix
 }
 
 /// Escape a free-text token for FTS5 MATCH (phrase query).
@@ -236,6 +257,24 @@ fn build_list_scenes_filter(args: &ListScenesArgs) -> ListScenesFilter {
         Some(true) => where_sql.push_str(" AND s.stashdb_ignored_at IS NOT NULL\n"),
         Some(false) => where_sql.push_str(" AND s.stashdb_ignored_at IS NULL\n"),
         None => {}
+    }
+    let folder_paths: Vec<&str> = args
+        .folder_paths
+        .iter()
+        .map(|f| f.trim())
+        .filter(|f| !f.is_empty())
+        .collect();
+    if !folder_paths.is_empty() {
+        let likes = std::iter::repeat("fx.path LIKE ? ESCAPE '!'")
+            .take(folder_paths.len())
+            .collect::<Vec<_>>()
+            .join(" OR ");
+        where_sql.push_str(&format!(
+            " AND EXISTS (SELECT 1 FROM files fx WHERE fx.scene_id = s.id AND ({likes}))\n"
+        ));
+        for folder in folder_paths {
+            binds.push(QueryBind::Text(folder_like_prefix(folder)));
+        }
     }
     let min_tags = match args.min_tag_count {
         Some(n) if n > 0 => n,
@@ -551,6 +590,59 @@ pub async fn scene_counts(state: State<'_, AppState>) -> Result<Counts, String> 
         total: total.0,
         favorites: favorites.0,
     })
+}
+
+/// A distinct immediate parent directory of library files (folder facet values).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct FolderRow {
+    /// Full directory path (as stored in `files.path` prefixes).
+    pub path: String,
+    /// Last path segment, for compact display.
+    pub name: String,
+    pub file_count: i64,
+}
+
+/// Distinct parent directories of all files, with file counts. Parent
+/// extraction happens in Rust — SQLite has no path functions.
+#[tauri::command]
+pub async fn list_folders(state: State<'_, AppState>) -> Result<Vec<FolderRow>, String> {
+    let rows: Vec<(String,)> = sqlx::query_as("SELECT path FROM files")
+        .fetch_all(&state.pool)
+        .await
+        .map_err(err)?;
+    let mut counts: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+    for (path,) in rows {
+        let trimmed = path.trim_end_matches(['\\', '/']);
+        if let Some(idx) = trimmed.rfind(['\\', '/']) {
+            let parent = &trimmed[..idx];
+            if !parent.is_empty() {
+                *counts.entry(parent.to_string()).or_default() += 1;
+            }
+        }
+    }
+    let mut folders: Vec<FolderRow> = counts
+        .into_iter()
+        .map(|(path, file_count)| {
+            let name = path
+                .rsplit(['\\', '/'])
+                .next()
+                .filter(|s| !s.is_empty())
+                .unwrap_or(&path)
+                .to_string();
+            FolderRow {
+                path,
+                name,
+                file_count,
+            }
+        })
+        .collect();
+    folders.sort_by(|a, b| {
+        a.name
+            .to_lowercase()
+            .cmp(&b.name.to_lowercase())
+            .then_with(|| a.path.cmp(&b.path))
+    });
+    Ok(folders)
 }
 
 /// Pool-taking core of backfill_scene_titles. Shared by the Tauri command and
@@ -908,7 +1000,7 @@ pub async fn delete_scene(
 
 #[cfg(test)]
 mod tests {
-    use super::{append_text_match_clause, QueryBind};
+    use super::{append_text_match_clause, folder_like_prefix, like_escape, QueryBind};
 
     #[test]
     fn text_match_includes_details_segments_and_binds_six_patterns() {
@@ -920,5 +1012,19 @@ mod tests {
         assert!(sql.contains("NOT ("));
         assert_eq!(binds.len(), 6);
         assert!(matches!(&binds[0], QueryBind::Text(s) if s == "%redhead%"));
+    }
+
+    #[test]
+    fn folder_prefix_appends_separator_and_wildcard() {
+        assert_eq!(folder_like_prefix(r"E:\Lib\Studio"), r"E:\Lib\Studio\%");
+        // Already-separated folder isn't doubled up.
+        assert_eq!(folder_like_prefix(r"E:\Lib\"), r"E:\Lib\%");
+    }
+
+    #[test]
+    fn folder_prefix_escapes_like_metachars() {
+        // '!' first, then % and _ — all escaped with the '!' escape char.
+        assert_eq!(like_escape("100%_x!"), "100!%!_x!!");
+        assert_eq!(folder_like_prefix(r"E:\100% legit"), r"E:\100!% legit\%");
     }
 }
