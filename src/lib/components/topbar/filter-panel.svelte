@@ -407,8 +407,10 @@
         placeholder="Filter folders…"
         class="mb-2 h-7 w-full rounded-md border border-input bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
       />
-      {#if filteredFolders.length === 0}
+      {#if allFolders.length === 0}
         <p class="text-xs text-muted-foreground">No folders yet. Scan a library first.</p>
+      {:else if filteredFolders.length === 0}
+        <p class="text-xs text-muted-foreground">No folders match your filter.</p>
       {:else}
         <div class="flex max-h-28 flex-wrap gap-1.5 overflow-y-auto" data-testid="folder-facet">
           {#each filteredFolders as f (f.path)}
