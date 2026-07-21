@@ -107,6 +107,9 @@ pub fn run() {
                 if let Err(e) = crate::catalog_cleanup::reconcile_missing_files(&pool).await {
                     tracing::warn!(error = %e, "missing-file reconcile on startup failed");
                 }
+                if let Err(e) = crate::catalog_cleanup::cleanup_stale_transcode_temps(&pool).await {
+                    tracing::warn!(error = %e, "stale transcode temp sweep on startup failed");
+                }
             });
             Ok(())
         })
