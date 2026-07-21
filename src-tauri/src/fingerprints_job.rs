@@ -155,19 +155,18 @@ async fn run_inner(
                 });
 
                 let path_buf = PathBuf::from(&path);
-                let digest = match tokio::task::spawn_blocking(move || md5::hash_file(&path_buf))
-                    .await
-                {
-                    Ok(Ok(d)) => Some(d),
-                    Ok(Err(e)) => {
-                        tracing::warn!(error = %e, path, "md5 hash failed");
-                        None
-                    }
-                    Err(e) => {
-                        tracing::warn!(error = %e, path, "md5 task join failed");
-                        None
-                    }
-                };
+                let digest =
+                    match tokio::task::spawn_blocking(move || md5::hash_file(&path_buf)).await {
+                        Ok(Ok(d)) => Some(d),
+                        Ok(Err(e)) => {
+                            tracing::warn!(error = %e, path, "md5 hash failed");
+                            None
+                        }
+                        Err(e) => {
+                            tracing::warn!(error = %e, path, "md5 task join failed");
+                            None
+                        }
+                    };
 
                 if let Some(digest) = digest {
                     if let Err(e) = fingerprints::upsert(&pool, &file_id, "md5", &digest).await {

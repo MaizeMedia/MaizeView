@@ -396,10 +396,7 @@ mod tests {
         let (seen, rec) = recorder();
         let emit = throttled_emit_every(Duration::from_secs(3600), rec);
         for n in 0..10 {
-            emit(TestProgress {
-                n,
-                finished: false,
-            });
+            emit(TestProgress { n, finished: false });
         }
         emit(TestProgress {
             n: 99,
@@ -415,10 +412,7 @@ mod tests {
         let (seen, rec) = recorder();
         let emit = throttled_emit_every(Duration::ZERO, rec);
         for n in 0..5 {
-            emit(TestProgress {
-                n,
-                finished: false,
-            });
+            emit(TestProgress { n, finished: false });
         }
         assert_eq!(*seen.lock().unwrap(), vec![0, 1, 2, 3, 4]);
     }
