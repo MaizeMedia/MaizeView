@@ -54,9 +54,9 @@ Set `E2E_AUTO_START=1` in `e2e/.env` to have Playwright launch the app for you (
 |------|------------------|--------|
 | `catalog.smoke.spec.ts` | No | Shell loads, sidebar nav |
 | `full-smoke.spec.ts` | Yes (`MAIZEVIEW_TEST_LIB`) | Library grid, search/sort/filters (curation gates, saved filters), favorites, scene drawer (Identify/Search, Segments, drawer beside grid), tags, playlists (create, Play, Delete), duplicates, settings (stash-box, Stash import, Appearance accents, identify stats), multiselect, player window open |
-| `search-filters.spec.ts` | Yes | Seeds tags/studio/performer; asserts `list_scenes` min_tag_count / exclude / studio / height / identified / ignore-state; UI curation chips; exclude+min tags; saved filter save/apply/delete; text −exclude |
+| `search-filters.spec.ts` | Yes | Seeds tags/studio/performer; asserts `list_scenes` min_tag_count / exclude / studio / height / identified / ignore-state / folder facet; UI curation chips; exclude+min tags; saved filter save/apply/delete; text −exclude |
 
-Latest verified: **search-filters 9/9, full smoke 23/23** (2026-07-20). Prefer `data-testid` for playlist Play/Delete (`playlist-play`, `playlist-delete`), Appearance (`appearance-settings`), curation (`min-tag-count`, `curation-gates`, `ignore-state`, `saved-filters-panel`).
+Latest verified: **search-filters 10/10, full smoke 24/24** (2026-07-21). Prefer `data-testid` for playlist Play/Delete (`playlist-play`, `playlist-delete`), Appearance (`appearance-settings`), curation (`min-tag-count`, `curation-gates`, `ignore-state`, `folder-facet`, `saved-filters-panel`).
 
 ## Environment variables
 

@@ -347,4 +347,41 @@ test.describe.serial("Search filters (curation + saved)", () => {
     const restored = await listScenes(catalogPage, {});
     expect(restored.total).toBe(baselineTotal);
   });
+
+  test("10 folder facet (API + UI)", async ({ catalogPage }) => {
+    await goLibrary(catalogPage);
+    await clearSearchAndFilters(catalogPage);
+
+    type FolderRow = { path: string; name: string; file_count: number };
+    const folderList = await invokeCmd<FolderRow[]>(catalogPage, "list_folders");
+    expect(folderList.length).toBeGreaterThan(0);
+    // Most-represented folder: stable target regardless of sandbox layout.
+    const folder = [...folderList].sort((a, b) => b.file_count - a.file_count)[0];
+
+    type GridRow = { id: string; file_path: string | null };
+    const res = await invokeCmd<{ scenes: GridRow[]; total: number }>(catalogPage, "list_scenes", {
+      args: { limit: 10_000, offset: 0, folder_paths: [folder.path] },
+    });
+    expect(res.total).toBeGreaterThanOrEqual(1);
+    // Scenes ≤ files in the folder (multi-file scenes collapse).
+    expect(res.total).toBeLessThanOrEqual(folder.file_count);
+    // Recursive match: returned scenes live under the folder prefix.
+    expect(
+      res.scenes.some((s) => s.file_path != null && s.file_path.startsWith(folder.path)),
+    ).toBe(true);
+
+    // UI: facet chips render, selection drives the topbar chip.
+    await openFilterPanel(catalogPage);
+    const facet = catalogPage.getByTestId("folder-facet");
+    await catalogPage.getByPlaceholder("Filter folders…").fill(folder.name);
+    await facet.getByRole("button", { name: new RegExp(folder.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")) }).first().click();
+    await closeFilterPanel(catalogPage);
+    await waitForDebounce(catalogPage);
+    await expect(
+      catalogPage.getByRole("button", { name: new RegExp(`\\+/${folder.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`) }),
+    ).toBeVisible();
+    await captureReport(catalogPage, "search-10-folder-facet");
+
+    await clearSearchAndFilters(catalogPage);
+  });
 });
