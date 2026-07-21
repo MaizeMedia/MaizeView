@@ -24,6 +24,8 @@ pub struct DuplicateSceneEntry {
     pub bitrate: Option<i64>,
     pub size_bytes: i64,
     pub codec: Option<String>,
+    /// Scene has a stash-box identify apply (`stashdb_applied_at IS NOT NULL`).
+    pub identified: bool,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -54,10 +56,12 @@ pub async fn find_duplicate_groups(
         Option<i64>,
         i64,
         Option<String>,
+        bool,
     )> = sqlx::query_as(
         r#"
             SELECT s.id, s.title, ph.value, f.path, f.thumb_path, s.favorite,
-                   f.width, f.height, f.duration, f.fps, f.bitrate, f.size_bytes, f.codec
+                   f.width, f.height, f.duration, f.fps, f.bitrate, f.size_bytes, f.codec,
+                   s.stashdb_applied_at IS NOT NULL AS identified
             FROM scenes s
             JOIN files f ON f.scene_id = s.id
             JOIN fingerprints ph ON ph.file_id = f.id AND ph.hash_type = 'phash'
@@ -150,6 +154,7 @@ pub async fn find_duplicate_groups(
                     bitrate: rows[i].10,
                     size_bytes: rows[i].11,
                     codec: rows[i].12.clone(),
+                    identified: rows[i].13,
                 })
                 .collect();
 
