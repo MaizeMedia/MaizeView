@@ -711,6 +711,8 @@ export interface DuplicateSceneEntry {
   bitrate: number | null;
   size_bytes: number;
   codec: string | null;
+  /** Scene has a stash-box identify apply. */
+  identified: boolean;
 }
 
 export interface DuplicateGroup {
