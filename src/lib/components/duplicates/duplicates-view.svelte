@@ -73,7 +73,7 @@
     if (s.width != null && s.height != null) parts.push(`${s.width}x${s.height}`);
     const dur = fmtDuration(s.duration);
     if (dur) parts.push(dur);
-    if (s.fps != null) parts.push(`${s.fps.toFixed(s.fps % 1 === 0 ? 0 : 1)} fps`);
+    if (s.fps != null) parts.push(`${s.fps.toFixed(2).replace(/\.?0+$/, "")} fps`);
     const br = fmtBitrate(s.bitrate);
     if (br) parts.push(br);
     if (s.size_bytes > 0) parts.push(fmtSize(s.size_bytes));
@@ -211,6 +211,7 @@
           <div class="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
             {#each group.scenes as scene (scene.scene_id)}
               {@const isKeeper = scene.scene_id === keeperId}
+              {@const spec = specLine(scene)}
               <div
                 class="overflow-hidden rounded-md border bg-background text-left transition-colors {isKeeper
                   ? 'border-primary ring-1 ring-primary/40'
@@ -249,8 +250,8 @@
                     <div class="truncate text-sm font-medium">
                       {scene.title ?? scene.file_path?.split(/[\\/]/).pop() ?? "Untitled"}
                     </div>
-                    {#if specLine(scene)}
-                      <div class="truncate text-[11px] text-foreground/80" title={specLine(scene)}>{specLine(scene)}</div>
+                    {#if spec}
+                      <div class="truncate text-[11px] text-foreground/80" title={spec}>{spec}</div>
                     {/if}
                     {#if scene.file_path}
                       <div class="truncate font-mono text-[10px] text-muted-foreground" title={scene.file_path}>
