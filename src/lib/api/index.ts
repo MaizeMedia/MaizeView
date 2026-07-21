@@ -102,12 +102,17 @@ export interface ListScenesArgs {
   identifiedOnly?: boolean;
   /** Multiple stash-box matches, not yet applied. */
   needsReviewOnly?: boolean;
+  /** Ignore-state filter: true = only ignored, false = only not-ignored, omit/null = any. */
+  ignored?: boolean | null;
   /** Min primary-file height in pixels. */
   minHeight?: number;
   minPerformerCount?: number;
   limit?: number;
   offset?: number;
 }
+
+/** Ignore-state facet for the library grid (maps to ListScenesArgs.ignored). */
+export type IgnoreState = "any" | "ignored" | "not_ignored";
 
 /** Snapshot stored in saved_filters.payload (JSON). */
 export interface SavedFilterPayload {
@@ -128,6 +133,7 @@ export interface SavedFilterPayload {
   minTagCount: number;
   identifiedOnly: boolean;
   needsReviewOnly: boolean;
+  ignoreState: IgnoreState;
   minHeight: number | null;
   minPerformerCount: number;
 }
@@ -188,6 +194,7 @@ export const scenes = {
         tagged_only: args.taggedOnly ?? false,
         identified_only: args.identifiedOnly ?? false,
         needs_review_only: args.needsReviewOnly ?? false,
+        ignored: args.ignored ?? null,
         min_height: args.minHeight ?? null,
         min_performer_count: args.minPerformerCount ?? null,
         limit: args.limit ?? LIST_SCENES_BATCH,
