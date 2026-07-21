@@ -7,15 +7,13 @@
   import { library } from "$lib/stores/library.svelte";
   import { stringifyError } from "$lib/utils";
   import {
-    tags as tagsApi,
-    performers as performersApi,
-    studios as studiosApi,
     savedFilters as savedFiltersApi,
     type SavedFilterPayload,
     type SavedFilterRow,
   } from "$lib/api";
   import type { TagRow, PerformerRow, StudioRow } from "$lib/api/types";
   import type { SortBy } from "$lib/api";
+  import { catalogs } from "$lib/stores/catalogs.svelte";
   import { onMount } from "svelte";
 
   // Debounced search → refresh.
@@ -52,34 +50,19 @@
 
   let filterOpen = $state(false);
   let savedOpen = $state(false);
-  let allTags = $state<TagRow[]>([]);
-  let allPerformers = $state<PerformerRow[]>([]);
-  let allStudios = $state<StudioRow[]>([]);
+  let allTags: TagRow[] = $derived(catalogs.tags);
+  let allPerformers: PerformerRow[] = $derived(catalogs.performers);
+  let allStudios: StudioRow[] = $derived(catalogs.studios);
   let savedList = $state<SavedFilterRow[]>([]);
   let saveName = $state("");
   let saveBusy = $state(false);
-
-  async function refreshMeta() {
-    const [t, p, s] = await Promise.all([
-      tagsApi.list(),
-      performersApi.list(),
-      studiosApi.list(),
-    ]);
-    allTags = t;
-    allPerformers = p;
-    allStudios = s;
-  }
 
   async function refreshSaved() {
     savedList = await savedFiltersApi.list();
   }
 
   onMount(async () => {
-    await Promise.all([refreshMeta(), refreshSaved()]);
-  });
-
-  $effect(() => {
-    if (!filterOpen) void refreshMeta();
+    await Promise.all([catalogs.ensureLoaded(), refreshSaved()]);
   });
 
   $effect(() => {

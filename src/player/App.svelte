@@ -492,15 +492,18 @@
   /** Refresh favorite + last_played cache for a scene (hearts + shuffle weight). */
   async function refreshSceneDetail(sceneId: string) {
     try {
-      const d = await scenes.detail(sceneId);
-      const fav = d.scene.favorite ?? 0;
+      // Lightweight: favorite + last_played_at only (shuffleMeta), not the full
+      // scene_detail join (files/performers/tags) the drawer needs.
+      const [meta] = await scenes.shuffleMeta([sceneId]);
+      if (!meta) return;
+      const fav = meta.favorite ?? 0;
       // Don't clobber the heart UI if the user already moved to another scene.
       if (sceneId === currentSceneId) favorite = fav;
       shuffleMetaByScene = {
         ...shuffleMetaByScene,
         [sceneId]: {
           favorite: fav,
-          lastPlayedAt: d.scene.last_played_at ?? new Date().toISOString(),
+          lastPlayedAt: meta.last_played_at ?? new Date().toISOString(),
         },
       };
     } catch {
@@ -736,9 +739,7 @@
   async function releasePlayerHandle() {
     if (!player) return;
     unlisten?.();
-    unlistenEvents?.();
     unlisten = null;
-    unlistenEvents = null;
     const handle = player;
     player = null;
     try {
@@ -810,7 +811,6 @@
 
   // ─── mount: boot libmpv, load file, observe ─────────────────────────────
   let unlisten: (() => void) | null = null;
-  let unlistenEvents: (() => void) | null = null;
   let removeResizeListener: (() => void) | null = null;
 
   onMount(async () => {
@@ -907,11 +907,6 @@
       }
     });
 
-    // Diagnostic: log ALL mpv events. Remove once playback is confirmed stable.
-    unlistenEvents = await player.onEvent((e) => {
-      console.log("[mpv event]", e);
-    });
-
     // Load the initial scene (8s timeout guards the first loadfile against a
     // vo/hwdec/wid hang). A dead first scene auto-skips forward through the
     // queue exactly like EOF would; only when nothing plays do we land on the
@@ -938,7 +933,6 @@
       void playerSettings.set(volume, muted);
     }
     unlisten?.();
-    unlistenEvents?.();
     // releasePlayerHandle() may have already destroyed mpv during delete.
     player?.destroy().catch(() => {});
   });

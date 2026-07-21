@@ -28,6 +28,7 @@
     TagRow,
   } from "$lib/api/types";
   import { library } from "$lib/stores/library.svelte";
+  import { catalogs } from "$lib/stores/catalogs.svelte";
   import { confirm } from "@tauri-apps/plugin-dialog";
   import { stringifyError } from "$lib/utils";
   import Button from "$components/ui/button/button.svelte";
@@ -47,10 +48,10 @@
   let titleEditing = $state(false);
   let detailsEditing = $state(false);
 
-  // Add-chip autocomplete pools
-  let allTags = $state<TagRow[]>([]);
-  let allPerformers = $state<PerformerRow[]>([]);
-  let allStudios = $state<StudioRow[]>([]);
+  // Add-chip autocomplete pools (shared catalogs cache — no refetch on open)
+  let allTags: TagRow[] = $derived(catalogs.tags);
+  let allPerformers: PerformerRow[] = $derived(catalogs.performers);
+  let allStudios: StudioRow[] = $derived(catalogs.studios);
   let allPlaylists = $state<PlaylistRow[]>([]);
   let newTagName = $state("");
   let newPerformerName = $state("");
@@ -163,18 +164,13 @@
     loading = true;
     error = null;
     try {
-      const [d, t, p, s, pl, segs] = await Promise.all([
+      const [d, pl, segs] = await Promise.all([
         scenes.detail(sceneId),
-        tagsApi.list(),
-        performersApi.list(),
-        studiosApi.list(),
         playlistsApi.list(),
         segmentsApi.list(sceneId),
+        catalogs.ensureLoaded(),
       ]);
       detail = d;
-      allTags = t;
-      allPerformers = p;
-      allStudios = s;
       allPlaylists = pl;
       sceneSegments = segs;
       titleDraft = d.scene.title ?? "";
@@ -284,6 +280,8 @@
         tag_ids: tagIds,
         create_tag_names: createTagNames,
       });
+      // Apply may have created catalog rows server-side — refresh the cache.
+      await catalogs.refresh();
       await load();
       await library.refresh();
     } catch (e) {
@@ -317,6 +315,8 @@
         comment: embedded.comment,
         artist: embedded.artist,
       });
+      // Artist→performer may have created a catalog row server-side.
+      await catalogs.refresh();
       await load();
       await library.refresh();
     } catch (e) {
@@ -450,8 +450,7 @@
   async function createAndAddTag() {
     if (!detail || !newTagName.trim()) return;
     try {
-      const t = await tagsApi.create(newTagName.trim());
-      allTags = [...allTags, t].sort((a, b) => a.name.localeCompare(b.name));
+      const t = await catalogs.createTag(newTagName.trim());
       await addTag(t);
       newTagName = "";
     } catch (e) {
@@ -487,10 +486,7 @@
   async function createAndAddPerformer() {
     if (!detail || !newPerformerName.trim()) return;
     try {
-      const p = await performersApi.create(newPerformerName.trim());
-      allPerformers = [...allPerformers, p].sort((a, b) =>
-        a.name.localeCompare(b.name),
-      );
+      const p = await catalogs.createPerformer(newPerformerName.trim());
       await addPerformer(p);
       newPerformerName = "";
     } catch (e) {
@@ -556,6 +552,8 @@
     try {
       await identifyApi.apply(detail.scene.id, match, { ...applyFields }, identifyResult?.provider_id);
       identifyResult = null;
+      // Applied studio/performer/tag fields may create catalog rows server-side.
+      await catalogs.refresh();
       await load({ resetIdentify: true });
       await library.refresh();
     } catch (e) {
