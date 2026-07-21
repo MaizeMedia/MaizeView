@@ -302,4 +302,49 @@ test.describe.serial("Search filters (curation + saved)", () => {
     await catalogPage.getByTestId("catalog-search").fill("");
     await waitForDebounce(catalogPage);
   });
+
+  test("09 ignore-state filter (API + UI)", async ({ catalogPage }) => {
+    await goLibrary(catalogPage);
+    await clearSearchAndFilters(catalogPage);
+
+    // Ignore one seeded scene via the batch command the multiselect bar uses.
+    await invokeCmd(catalogPage, "batch_set_stashdb_ignore", {
+      sceneIds: [sceneIds[2]],
+      ignored: true,
+    });
+
+    const onlyIgnored = await listScenes(catalogPage, { ignored: true });
+    expect(onlyIgnored.scenes.some((s) => s.id === sceneIds[2])).toBe(true);
+    expect(onlyIgnored.scenes.some((s) => s.id === sceneIds[0])).toBe(false);
+
+    const notIgnored = await listScenes(catalogPage, { ignored: false });
+    expect(notIgnored.scenes.some((s) => s.id === sceneIds[2])).toBe(false);
+    expect(notIgnored.scenes.some((s) => s.id === sceneIds[0])).toBe(true);
+    expect(notIgnored.total).toBe(baselineTotal - 1);
+
+    // UI: panel select drives the chip + grid query.
+    await openFilterPanel(catalogPage);
+    await catalogPage.getByTestId("ignore-state").selectOption("ignored");
+    await closeFilterPanel(catalogPage);
+    await waitForDebounce(catalogPage);
+    await expect(catalogPage.getByRole("button", { name: "Ignored", exact: true })).toBeVisible();
+    await captureReport(catalogPage, "search-09-ignore-state");
+
+    await openFilterPanel(catalogPage);
+    await catalogPage.getByTestId("ignore-state").selectOption("not_ignored");
+    await closeFilterPanel(catalogPage);
+    await waitForDebounce(catalogPage);
+    await expect(catalogPage.getByRole("button", { name: "Not ignored", exact: true })).toBeVisible();
+
+    // Cleanup: filter back to Any, unignore the scene for later suites.
+    await openFilterPanel(catalogPage);
+    await catalogPage.getByTestId("ignore-state").selectOption("any");
+    await closeFilterPanel(catalogPage);
+    await invokeCmd(catalogPage, "batch_set_stashdb_ignore", {
+      sceneIds: [sceneIds[2]],
+      ignored: false,
+    });
+    const restored = await listScenes(catalogPage, {});
+    expect(restored.total).toBe(baselineTotal);
+  });
 });

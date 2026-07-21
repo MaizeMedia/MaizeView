@@ -409,6 +409,16 @@
         <X class="size-3" />
       </button>
     {/if}
+    {#if library.ignoreState !== "any"}
+      <button
+        type="button"
+        class="flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-xs text-primary hover:bg-primary/25"
+        onclick={() => library.setIgnoreState("any")}
+      >
+        {library.ignoreState === "ignored" ? "Ignored" : "Not ignored"}
+        <X class="size-3" />
+      </button>
+    {/if}
     {#if library.minPerformerCount > 0}
       <button
         type="button"

@@ -10,6 +10,7 @@ import {
   LIST_SCENES_BATCH,
   type ListScenesArgs,
   type SortBy,
+  type IgnoreState,
   type BatchIdentifyProgress,
   type BatchIdentifyLibraryOptions,
   type SavedFilterPayload,
@@ -43,6 +44,8 @@ class LibraryStore {
   identifiedOnly = $state(false);
   /** Multiple stash-box matches, not yet applied. */
   needsReviewOnly = $state(false);
+  /** Ignore-state facet: "any" (off) / "ignored" only / "not_ignored" only. */
+  ignoreState = $state<IgnoreState>("any");
   /** null = off; e.g. 720 / 1080. */
   minHeight = $state<number | null>(null);
   minPerformerCount = $state(0);
@@ -111,6 +114,7 @@ class LibraryStore {
       minTagCount: this.minTagCount > 0 ? this.minTagCount : undefined,
       identifiedOnly: this.identifiedOnly || undefined,
       needsReviewOnly: this.needsReviewOnly || undefined,
+      ignored: this.ignoreState === "any" ? undefined : this.ignoreState === "ignored",
       minHeight: this.minHeight && this.minHeight > 0 ? this.minHeight : undefined,
       minPerformerCount: this.minPerformerCount > 0 ? this.minPerformerCount : undefined,
       limit: LIST_SCENES_BATCH,
@@ -137,6 +141,7 @@ class LibraryStore {
       minTagCount: this.minTagCount,
       identifiedOnly: this.identifiedOnly,
       needsReviewOnly: this.needsReviewOnly,
+      ignoreState: this.ignoreState,
       minHeight: this.minHeight,
       minPerformerCount: this.minPerformerCount,
     };
@@ -160,6 +165,7 @@ class LibraryStore {
     this.minTagCount = payload.minTagCount ?? 0;
     this.identifiedOnly = !!payload.identifiedOnly;
     this.needsReviewOnly = !!payload.needsReviewOnly;
+    this.ignoreState = payload.ignoreState ?? "any";
     this.minHeight = payload.minHeight ?? null;
     this.minPerformerCount = payload.minPerformerCount ?? 0;
     void this.refresh();
@@ -435,13 +441,29 @@ class LibraryStore {
 
   setIdentifiedOnly(value: boolean) {
     this.identifiedOnly = value;
-    if (value) this.needsReviewOnly = false;
+    if (value) {
+      this.needsReviewOnly = false;
+      if (this.ignoreState === "ignored") this.ignoreState = "any";
+    }
     void this.refresh();
   }
 
   setNeedsReviewOnly(value: boolean) {
     this.needsReviewOnly = value;
-    if (value) this.identifiedOnly = false;
+    if (value) {
+      this.identifiedOnly = false;
+      if (this.ignoreState === "ignored") this.ignoreState = "any";
+    }
+    void this.refresh();
+  }
+
+  setIgnoreState(value: IgnoreState) {
+    this.ignoreState = value;
+    // "Ignored only" contradicts identified/needs-review (both exclude ignored).
+    if (value === "ignored") {
+      this.identifiedOnly = false;
+      this.needsReviewOnly = false;
+    }
     void this.refresh();
   }
 
@@ -450,6 +472,7 @@ class LibraryStore {
     this.view = "library";
     this.needsReviewOnly = true;
     this.identifiedOnly = false;
+    this.ignoreState = "any";
     void this.refresh();
   }
 
@@ -511,6 +534,7 @@ class LibraryStore {
     this.minTagCount = 0;
     this.identifiedOnly = false;
     this.needsReviewOnly = false;
+    this.ignoreState = "any";
     this.minHeight = null;
     this.minPerformerCount = 0;
     void this.refresh();
@@ -532,6 +556,7 @@ class LibraryStore {
       this.minTagCount > 0 ||
       this.identifiedOnly ||
       this.needsReviewOnly ||
+      this.ignoreState !== "any" ||
       this.minHeight != null ||
       this.minPerformerCount > 0
     );
@@ -553,6 +578,7 @@ class LibraryStore {
       (this.minTagCount > 0 ? 1 : 0) +
       (this.identifiedOnly ? 1 : 0) +
       (this.needsReviewOnly ? 1 : 0) +
+      (this.ignoreState !== "any" ? 1 : 0) +
       (this.minHeight != null ? 1 : 0) +
       (this.minPerformerCount > 0 ? 1 : 0)
     );

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { X, Check, Loader2, Ban } from "@lucide/svelte";
-  import { tags as tagsApi, performers as performersApi, studios as studiosApi } from "$lib/api";
+  import { tags as tagsApi, performers as performersApi, studios as studiosApi, type IgnoreState } from "$lib/api";
   import type { PerformerRow, TagRow, StudioRow } from "$lib/api/types";
   import { library } from "$lib/stores/library.svelte";
 
@@ -129,6 +129,22 @@
           <span class="block text-muted-foreground">Multiple stash-box matches — open a scene and pick the right one.</span>
         </span>
       </label>
+      <div>
+        <div class="mb-1 text-[11px] text-muted-foreground">Ignore state</div>
+        <select
+          data-testid="ignore-state"
+          value={library.ignoreState}
+          onchange={(e) => library.setIgnoreState((e.currentTarget as HTMLSelectElement).value as IgnoreState)}
+          class="h-7 w-full rounded-md border border-input bg-background px-2 text-xs"
+        >
+          <option value="any">Any</option>
+          <option value="ignored">Ignored only</option>
+          <option value="not_ignored">Not ignored</option>
+        </select>
+        <p class="mt-1 text-[11px] leading-snug text-muted-foreground">
+          Ignored scenes are skipped by identify (drawer Unlink / selection Ignore identify).
+        </p>
+      </div>
       <div>
         <div class="mb-1 text-[11px] text-muted-foreground">Min performers</div>
         <select

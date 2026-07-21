@@ -81,6 +81,9 @@ pub struct ListScenesArgs {
     pub identified_only: Option<bool>,
     /// Multiple stash-box matches and not yet applied (needs manual pick).
     pub needs_review_only: Option<bool>,
+    /// Ignore-state filter: Some(true) = only ignored (`stashdb_ignored_at IS NOT
+    /// NULL`), Some(false) = only not-ignored. None (or null) = no filter.
+    pub ignored: Option<bool>,
     /// Only scenes with these studio IDs (ANY).
     #[serde(default)]
     pub studio_ids: Vec<String>,
@@ -228,6 +231,11 @@ fn build_list_scenes_filter(args: &ListScenesArgs) -> ListScenesFilter {
     }
     if args.needs_review_only.unwrap_or(false) {
         where_sql.push_str(&format!(" AND {NEEDS_REVIEW_WHERE}\n"));
+    }
+    match args.ignored {
+        Some(true) => where_sql.push_str(" AND s.stashdb_ignored_at IS NOT NULL\n"),
+        Some(false) => where_sql.push_str(" AND s.stashdb_ignored_at IS NULL\n"),
+        None => {}
     }
     let min_tags = match args.min_tag_count {
         Some(n) if n > 0 => n,
