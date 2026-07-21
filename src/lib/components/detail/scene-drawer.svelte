@@ -819,7 +819,11 @@
                 disabled={clearingIdentify}
                 title="Unlink and remove ALL tags + performers (wrong-match cleanup)"
               >
-                Unlink + strip
+                {#if clearingIdentify}
+                  <Loader2 class="size-3 animate-spin" />
+                {:else}
+                  Unlink + strip
+                {/if}
               </Button>
             {:else if detail.scene.stashdb_ignored_at}
               <Button
