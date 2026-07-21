@@ -18,6 +18,15 @@ fn is_transcode_temp(file_name: &str) -> bool {
     file_name.starts_with('.') && file_name.contains(".mvtrans-") && file_name.ends_with(".mp4")
 }
 
+/// Stale = KNOWN age at or past the grace window. Unknown age — metadata
+/// error, or clock skew putting the mtime in the future (common on NAS/SMB
+/// shares) — keeps the file: the check fails closed so an active job's temp
+/// is never deleted.
+fn is_stale(age: Option<std::time::Duration>) -> bool {
+    const GRACE: std::time::Duration = std::time::Duration::from_secs(3600);
+    matches!(age, Some(a) if a >= GRACE)
+}
+
 /// Delete interrupted-transcode temp fragments under all scan roots. Files
 /// newer than the grace window are left alone — no transcode job can be
 /// running at startup, but this guards against racing one started right after.
@@ -27,7 +36,6 @@ pub async fn cleanup_stale_transcode_temps(pool: &SqlitePool) -> anyhow::Result<
         .await?;
 
     let deleted = tokio::task::spawn_blocking(move || {
-        const GRACE: std::time::Duration = std::time::Duration::from_secs(3600);
         let now = std::time::SystemTime::now();
         let mut deleted = 0u64;
         for root in roots {
@@ -45,13 +53,12 @@ pub async fn cleanup_stale_transcode_temps(pool: &SqlitePool) -> anyhow::Result<
                 if !is_transcode_temp(&name) {
                     continue;
                 }
-                let fresh = entry
+                let age = entry
                     .metadata()
                     .ok()
                     .and_then(|m| m.modified().ok())
-                    .and_then(|t| now.duration_since(t).ok())
-                    .is_some_and(|age| age < GRACE);
-                if fresh {
+                    .and_then(|t| now.duration_since(t).ok());
+                if !is_stale(age) {
                     continue;
                 }
                 match std::fs::remove_file(entry.path()) {
@@ -166,7 +173,17 @@ pub fn path_is_under_root(file_path: &str, root: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_transcode_temp, path_is_under_root};
+    use super::{is_stale, is_transcode_temp, path_is_under_root};
+
+    #[test]
+    fn stale_only_when_age_known_and_past_grace() {
+        use std::time::Duration;
+        assert!(is_stale(Some(Duration::from_secs(3600))));
+        assert!(is_stale(Some(Duration::from_secs(72_000))));
+        assert!(!is_stale(Some(Duration::from_secs(3599))));
+        // Unknown age (metadata error, or clock-skewed future mtime) keeps the file.
+        assert!(!is_stale(None));
+    }
 
     #[test]
     fn transcode_temp_pattern() {
