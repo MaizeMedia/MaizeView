@@ -12,6 +12,66 @@ use std::path::Path;
 use sqlx::SqlitePool;
 use tracing::info;
 
+/// Temp-file fragment left by an interrupted transcode job:
+/// `.{stem}.mvtrans-{id}.mp4` in the source's directory (see transcode_job.rs).
+fn is_transcode_temp(file_name: &str) -> bool {
+    file_name.starts_with('.') && file_name.contains(".mvtrans-") && file_name.ends_with(".mp4")
+}
+
+/// Delete interrupted-transcode temp fragments under all scan roots. Files
+/// newer than the grace window are left alone — no transcode job can be
+/// running at startup, but this guards against racing one started right after.
+pub async fn cleanup_stale_transcode_temps(pool: &SqlitePool) -> anyhow::Result<u64> {
+    let roots: Vec<String> = sqlx::query_scalar("SELECT path FROM scan_paths")
+        .fetch_all(pool)
+        .await?;
+
+    let deleted = tokio::task::spawn_blocking(move || {
+        const GRACE: std::time::Duration = std::time::Duration::from_secs(3600);
+        let now = std::time::SystemTime::now();
+        let mut deleted = 0u64;
+        for root in roots {
+            if !Path::new(&root).is_dir() {
+                continue; // offline root — nothing to sweep
+            }
+            for entry in walkdir::WalkDir::new(&root)
+                .into_iter()
+                .filter_map(|e| e.ok())
+            {
+                if !entry.file_type().is_file() {
+                    continue;
+                }
+                let name = entry.file_name().to_string_lossy();
+                if !is_transcode_temp(&name) {
+                    continue;
+                }
+                let fresh = entry
+                    .metadata()
+                    .ok()
+                    .and_then(|m| m.modified().ok())
+                    .and_then(|t| now.duration_since(t).ok())
+                    .is_some_and(|age| age < GRACE);
+                if fresh {
+                    continue;
+                }
+                match std::fs::remove_file(entry.path()) {
+                    Ok(()) => {
+                        deleted += 1;
+                        info!(path = %entry.path().display(), "deleted stale transcode temp");
+                    }
+                    Err(e) => {
+                        tracing::warn!(path = %entry.path().display(), error = %e, "stale transcode temp delete failed");
+                    }
+                }
+            }
+        }
+        deleted
+    })
+    .await?;
+
+    Ok(deleted)
+}
+
 /// Delete file rows whose path is missing on disk, then prune empty scenes.
 /// Skips anything under an offline/missing scan-path root.
 pub async fn reconcile_missing_files(pool: &SqlitePool) -> anyhow::Result<u64> {
@@ -106,7 +166,17 @@ pub fn path_is_under_root(file_path: &str, root: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::path_is_under_root;
+    use super::{is_transcode_temp, path_is_under_root};
+
+    #[test]
+    fn transcode_temp_pattern() {
+        assert!(is_transcode_temp(".Some File.mvtrans-01J4ZXY.mp4"));
+        assert!(!is_transcode_temp("Some File.mp4"));
+        // Missing the leading dot: not our temp shape.
+        assert!(!is_transcode_temp("Some File.mvtrans-01J4ZXY.mp4"));
+        // Temps are always mp4.
+        assert!(!is_transcode_temp(".Some File.mvtrans-01J4ZXY.mkv"));
+    }
 
     #[test]
     fn path_under_root_windows_style() {
