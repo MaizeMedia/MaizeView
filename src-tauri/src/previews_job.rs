@@ -4,7 +4,7 @@
 use std::{
     path::Path,
     sync::{
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicU64, AtomicUsize, Ordering},
         Arc,
     },
 };
@@ -16,7 +16,8 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     job_parallel::{
-        distinct_drives, drive_key, media_job_workers, per_drive_workers, DriveLimiter,
+        distinct_drives, drive_key, media_job_workers, per_drive_workers, throttled_emit,
+        DriveLimiter, ProgressEvent,
     },
     models::now,
     previews,
@@ -34,6 +35,12 @@ pub struct PreviewProgress {
     pub cancelled: bool,
 }
 
+impl ProgressEvent for PreviewProgress {
+    fn is_terminal(&self) -> bool {
+        self.finished || self.cancelled
+    }
+}
+
 /// Generate thumbnails/sprites for files missing grid thumbs.
 pub async fn run(
     pool: &SqlitePool,
@@ -44,7 +51,7 @@ pub async fn run(
     run_inner(
         pool,
         cancel,
-        Arc::new(move |p| {
+        throttled_emit(move |p: PreviewProgress| {
             let _ = app.emit(PROGRESS_EVENT, &p);
         }),
     )
@@ -93,73 +100,85 @@ async fn run_inner(
     );
 
     let limiter = Arc::new(DriveLimiter::new(workers, per_drive));
+    let rows = Arc::new(rows);
+    let next = Arc::new(AtomicUsize::new(0));
     let done = Arc::new(AtomicU64::new(0));
     let mut set = JoinSet::new();
 
-    for (file_id, path, duration) in rows {
-        if cancel.is_cancelled() {
-            break;
-        }
+    // Fixed worker pool pulling from a shared index instead of one task per
+    // file; per-drive caps still apply via the limiter inside the loop.
+    // Trade-off (accepted): rows are consumed in query order, so a long run of
+    // same-drive rows can park workers on that drive's semaphore (head-of-line
+    // blocking). Scanned_at ordering interleaves drives in practice.
+    for _ in 0..workers {
         let pool = pool.clone();
         let emit = emit.clone();
         let limiter = limiter.clone();
+        let rows = rows.clone();
+        let next = next.clone();
         let done = done.clone();
         let cancel = cancel.clone();
         set.spawn(async move {
-            if cancel.is_cancelled() {
-                return;
-            }
-            let drive = drive_key(Path::new(&path));
-            let _permit = limiter.acquire(&drive).await;
-            if cancel.is_cancelled() {
-                return;
-            }
-
-            emit(PreviewProgress {
-                done: done.load(Ordering::Relaxed),
-                total,
-                current_path: Some(path.clone()),
-                finished: false,
-                cancelled: false,
-            });
-
-            let path_for_job = path.clone();
-            let file_id_for_job = file_id.clone();
-            let gen = tokio::task::spawn_blocking(move || {
-                previews::generate(&file_id_for_job, Path::new(&path_for_job), duration)
-            })
-            .await;
-
-            match gen {
-                Ok(Ok(Some((thumb, sprite, vtt)))) => {
-                    let ts = now().to_rfc3339();
-                    if let Err(e) = sqlx::query(
-                        "UPDATE files SET thumb_path = ?, thumb_sprite_path = ?, vtt_path = ?, scanned_at = ? WHERE id = ?",
-                    )
-                    .bind(thumb.to_string_lossy().to_string())
-                    .bind(sprite.to_string_lossy().to_string())
-                    .bind(vtt.to_string_lossy().to_string())
-                    .bind(ts)
-                    .bind(&file_id)
-                    .execute(&pool)
-                    .await
-                    {
-                        tracing::warn!(error = %e, file_id, "updating preview paths failed");
-                    }
+            loop {
+                if cancel.is_cancelled() {
+                    return;
                 }
-                Ok(Ok(None)) => {}
-                Ok(Err(e)) => tracing::warn!(error = %e, path, "preview generation failed"),
-                Err(e) => tracing::warn!(error = %e, path, "preview task join failed"),
-            }
+                let i = next.fetch_add(1, Ordering::Relaxed);
+                let Some((file_id, path, duration)) = rows.get(i).cloned() else {
+                    return;
+                };
+                let drive = drive_key(Path::new(&path));
+                let _permit = limiter.acquire(&drive).await;
+                if cancel.is_cancelled() {
+                    return;
+                }
 
-            let n = done.fetch_add(1, Ordering::Relaxed) + 1;
-            emit(PreviewProgress {
-                done: n,
-                total,
-                current_path: Some(path),
-                finished: false,
-                cancelled: false,
-            });
+                emit(PreviewProgress {
+                    done: done.load(Ordering::Relaxed),
+                    total,
+                    current_path: Some(path.clone()),
+                    finished: false,
+                    cancelled: false,
+                });
+
+                let path_for_job = path.clone();
+                let file_id_for_job = file_id.clone();
+                let gen = tokio::task::spawn_blocking(move || {
+                    previews::generate(&file_id_for_job, Path::new(&path_for_job), duration)
+                })
+                .await;
+
+                match gen {
+                    Ok(Ok(Some((thumb, sprite, vtt)))) => {
+                        let ts = now().to_rfc3339();
+                        if let Err(e) = sqlx::query(
+                            "UPDATE files SET thumb_path = ?, thumb_sprite_path = ?, vtt_path = ?, scanned_at = ? WHERE id = ?",
+                        )
+                        .bind(thumb.to_string_lossy().to_string())
+                        .bind(sprite.to_string_lossy().to_string())
+                        .bind(vtt.to_string_lossy().to_string())
+                        .bind(ts)
+                        .bind(&file_id)
+                        .execute(&pool)
+                        .await
+                        {
+                            tracing::warn!(error = %e, file_id, "updating preview paths failed");
+                        }
+                    }
+                    Ok(Ok(None)) => {}
+                    Ok(Err(e)) => tracing::warn!(error = %e, path, "preview generation failed"),
+                    Err(e) => tracing::warn!(error = %e, path, "preview task join failed"),
+                }
+
+                let n = done.fetch_add(1, Ordering::Relaxed) + 1;
+                emit(PreviewProgress {
+                    done: n,
+                    total,
+                    current_path: Some(path),
+                    finished: false,
+                    cancelled: false,
+                });
+            }
         });
     }
 

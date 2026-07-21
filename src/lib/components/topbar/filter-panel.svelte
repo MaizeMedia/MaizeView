@@ -1,13 +1,14 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { X, Check, Loader2, Ban } from "@lucide/svelte";
-  import { tags as tagsApi, performers as performersApi, studios as studiosApi, folders as foldersApi, type FolderRow, type IgnoreState } from "$lib/api";
+  import { folders as foldersApi, type FolderRow, type IgnoreState } from "$lib/api";
   import type { PerformerRow, TagRow, StudioRow } from "$lib/api/types";
+  import { catalogs } from "$lib/stores/catalogs.svelte";
   import { library } from "$lib/stores/library.svelte";
 
-  let allTags = $state<TagRow[]>([]);
-  let allPerformers = $state<PerformerRow[]>([]);
-  let allStudios = $state<StudioRow[]>([]);
+  let allTags: TagRow[] = $derived(catalogs.tags);
+  let allPerformers: PerformerRow[] = $derived(catalogs.performers);
+  let allStudios: StudioRow[] = $derived(catalogs.studios);
   let allFolders = $state<FolderRow[]>([]);
   let loading = $state(true);
   let tagQuery = $state("");
@@ -21,15 +22,12 @@
   async function load() {
     loading = true;
     try {
-      const [t, p, s, f] = await Promise.all([
-        tagsApi.list(),
-        performersApi.list(),
-        studiosApi.list(),
+      const [f] = await Promise.all([
         foldersApi.list(),
+        // The panel is opened rarely and must never show stale catalogs
+        // (out-of-band creates don't reach the cache) — force a refresh.
+        catalogs.refresh(),
       ]);
-      allTags = t;
-      allPerformers = p;
-      allStudios = s;
       allFolders = f;
     } finally {
       loading = false;
@@ -407,8 +405,10 @@
         placeholder="Filter folders…"
         class="mb-2 h-7 w-full rounded-md border border-input bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
       />
-      {#if filteredFolders.length === 0}
+      {#if allFolders.length === 0}
         <p class="text-xs text-muted-foreground">No folders yet. Scan a library first.</p>
+      {:else if filteredFolders.length === 0}
+        <p class="text-xs text-muted-foreground">No folders match your filter.</p>
       {:else}
         <div class="flex max-h-28 flex-wrap gap-1.5 overflow-y-auto" data-testid="folder-facet">
           {#each filteredFolders as f (f.path)}

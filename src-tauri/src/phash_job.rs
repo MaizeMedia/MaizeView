@@ -3,7 +3,7 @@
 use std::{
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicU64, AtomicUsize, Ordering},
         Arc,
     },
 };
@@ -16,7 +16,8 @@ use tokio_util::sync::CancellationToken;
 use crate::{
     fingerprints,
     job_parallel::{
-        distinct_drives, drive_key, media_job_workers, per_drive_workers, DriveLimiter,
+        distinct_drives, drive_key, media_job_workers, per_drive_workers, throttled_emit,
+        DriveLimiter, ProgressEvent,
     },
     scanner::phash,
 };
@@ -31,6 +32,12 @@ pub struct PhashProgress {
     pub finished: bool,
     #[serde(default)]
     pub cancelled: bool,
+}
+
+impl ProgressEvent for PhashProgress {
+    fn is_terminal(&self) -> bool {
+        self.finished || self.cancelled
+    }
 }
 
 pub async fn run(
@@ -61,7 +68,7 @@ async fn run_with_options(
         pool,
         rebuild,
         cancel,
-        Arc::new(move |p| {
+        throttled_emit(move |p: PhashProgress| {
             let _ = app.emit(PROGRESS_EVENT, &p);
         }),
     )
@@ -129,38 +136,94 @@ async fn run_inner(
     );
 
     let limiter = Arc::new(DriveLimiter::new(workers, per_drive));
+    let rows = Arc::new(rows);
+    let next = Arc::new(AtomicUsize::new(0));
     let done = Arc::new(AtomicU64::new(0));
     let mut set = JoinSet::new();
 
-    for (file_id, path, duration, oshash) in rows {
-        if cancel.is_cancelled() {
-            break;
-        }
+    // Fixed worker pool pulling from a shared index instead of one task per
+    // file; per-drive caps still apply via the limiter inside the loop.
+    // Trade-off (accepted): rows are consumed in query order, so a long run of
+    // same-drive rows can park workers on that drive's semaphore (head-of-line
+    // blocking). Scanned_at ordering interleaves drives in practice.
+    for _ in 0..workers {
         let pool = pool.clone();
         let emit = emit.clone();
         let limiter = limiter.clone();
+        let rows = rows.clone();
+        let next = next.clone();
         let done = done.clone();
         let cancel = cancel.clone();
         set.spawn(async move {
-            if cancel.is_cancelled() {
-                return;
-            }
-            let drive = drive_key(Path::new(&path));
-            let _permit = limiter.acquire(&drive).await;
-            if cancel.is_cancelled() {
-                return;
-            }
+            loop {
+                if cancel.is_cancelled() {
+                    return;
+                }
+                let i = next.fetch_add(1, Ordering::Relaxed);
+                let Some((file_id, path, duration, oshash)) = rows.get(i).cloned() else {
+                    return;
+                };
+                let drive = drive_key(Path::new(&path));
+                let _permit = limiter.acquire(&drive).await;
+                if cancel.is_cancelled() {
+                    return;
+                }
 
-            emit(PhashProgress {
-                done: done.load(Ordering::Relaxed),
-                total,
-                current_path: Some(path.clone()),
-                finished: false,
-                cancelled: false,
-            });
+                emit(PhashProgress {
+                    done: done.load(Ordering::Relaxed),
+                    total,
+                    current_path: Some(path.clone()),
+                    finished: false,
+                    cancelled: false,
+                });
 
-            let duration = duration.unwrap_or(0.0);
-            if duration <= 0.0 {
+                let duration = duration.unwrap_or(0.0);
+                if duration <= 0.0 {
+                    let n = done.fetch_add(1, Ordering::Relaxed) + 1;
+                    emit(PhashProgress {
+                        done: n,
+                        total,
+                        current_path: Some(path),
+                        finished: false,
+                        cancelled: false,
+                    });
+                    continue;
+                }
+
+                let reused = if let Some(ref osh) = oshash {
+                    fingerprints::find_phash_by_oshash(&pool, osh)
+                        .await
+                        .ok()
+                        .flatten()
+                } else {
+                    None
+                };
+
+                let digest = if let Some(existing) = reused {
+                    Some(existing)
+                } else {
+                    let path_buf = PathBuf::from(&path);
+                    match tokio::task::spawn_blocking(move || phash::hash_file(&path_buf, duration))
+                        .await
+                    {
+                        Ok(Ok(d)) => Some(d),
+                        Ok(Err(e)) => {
+                            tracing::warn!(error = %e, path, "phash computation failed");
+                            None
+                        }
+                        Err(e) => {
+                            tracing::warn!(error = %e, path, "phash task join failed");
+                            None
+                        }
+                    }
+                };
+
+                if let Some(digest) = digest {
+                    if let Err(e) = fingerprints::upsert(&pool, &file_id, "phash", &digest).await {
+                        tracing::warn!(error = %e, file_id, path, "storing phash fingerprint failed");
+                    }
+                }
+
                 let n = done.fetch_add(1, Ordering::Relaxed) + 1;
                 emit(PhashProgress {
                     done: n,
@@ -169,51 +232,7 @@ async fn run_inner(
                     finished: false,
                     cancelled: false,
                 });
-                return;
             }
-
-            let reused = if let Some(ref osh) = oshash {
-                fingerprints::find_phash_by_oshash(&pool, osh)
-                    .await
-                    .ok()
-                    .flatten()
-            } else {
-                None
-            };
-
-            let digest = if let Some(existing) = reused {
-                Some(existing)
-            } else {
-                let path_buf = PathBuf::from(&path);
-                match tokio::task::spawn_blocking(move || phash::hash_file(&path_buf, duration))
-                    .await
-                {
-                    Ok(Ok(d)) => Some(d),
-                    Ok(Err(e)) => {
-                        tracing::warn!(error = %e, path, "phash computation failed");
-                        None
-                    }
-                    Err(e) => {
-                        tracing::warn!(error = %e, path, "phash task join failed");
-                        None
-                    }
-                }
-            };
-
-            if let Some(digest) = digest {
-                if let Err(e) = fingerprints::upsert(&pool, &file_id, "phash", &digest).await {
-                    tracing::warn!(error = %e, file_id, path, "storing phash fingerprint failed");
-                }
-            }
-
-            let n = done.fetch_add(1, Ordering::Relaxed) + 1;
-            emit(PhashProgress {
-                done: n,
-                total,
-                current_path: Some(path),
-                finished: false,
-                cancelled: false,
-            });
         });
     }
 

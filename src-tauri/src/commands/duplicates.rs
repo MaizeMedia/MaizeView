@@ -16,6 +16,14 @@ pub struct DuplicateSceneEntry {
     pub phash: String,
     pub thumb_path: Option<String>,
     pub favorite: i64,
+    // Representative-file specs (keeper-decision info):
+    pub width: Option<i64>,
+    pub height: Option<i64>,
+    pub duration: Option<f64>,
+    pub fps: Option<f64>,
+    pub bitrate: Option<i64>,
+    pub size_bytes: i64,
+    pub codec: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -39,9 +47,17 @@ pub async fn find_duplicate_groups(
         Option<String>,
         Option<String>,
         i64,
+        Option<i64>,
+        Option<i64>,
+        Option<f64>,
+        Option<f64>,
+        Option<i64>,
+        i64,
+        Option<String>,
     )> = sqlx::query_as(
         r#"
-            SELECT s.id, s.title, ph.value, f.path, f.thumb_path, s.favorite
+            SELECT s.id, s.title, ph.value, f.path, f.thumb_path, s.favorite,
+                   f.width, f.height, f.duration, f.fps, f.bitrate, f.size_bytes, f.codec
             FROM scenes s
             JOIN files f ON f.scene_id = s.id
             JOIN fingerprints ph ON ph.file_id = f.id AND ph.hash_type = 'phash'
@@ -127,6 +143,13 @@ pub async fn find_duplicate_groups(
                     phash: rows[i].2.clone(),
                     thumb_path: rows[i].4.clone(),
                     favorite: rows[i].5,
+                    width: rows[i].6,
+                    height: rows[i].7,
+                    duration: rows[i].8,
+                    fps: rows[i].9,
+                    bitrate: rows[i].10,
+                    size_bytes: rows[i].11,
+                    codec: rows[i].12.clone(),
                 })
                 .collect();
 

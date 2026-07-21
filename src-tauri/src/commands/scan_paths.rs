@@ -91,23 +91,38 @@ pub async fn remove_scan_path(state: State<'_, AppState>, id: String) -> Result<
         .await
         .map_err(err)?;
 
-    // Drop catalog entries under this root (files stay on disk).
-    let files: Vec<(String, String)> = sqlx::query_as("SELECT id, path FROM files")
-        .fetch_all(&state.pool)
-        .await
-        .map_err(err)?;
-    for (file_id, path) in files {
-        if crate::catalog_cleanup::path_is_under_root(&path, &root) {
-            sqlx::query("DELETE FROM files WHERE id = ?")
-                .bind(&file_id)
-                .execute(&state.pool)
-                .await
-                .map_err(err)?;
-        }
+    // Drop catalog entries under this root (files stay on disk). Set-based:
+    // one DELETE instead of a per-row loop; FK cascades + orphan prune handle
+    // the rest. Semantics mirror catalog_cleanup::path_is_under_root
+    // (normalize, case-insensitive, drive-root special case).
+    let mut norm_root = crate::paths::normalize_windows_path(&root).to_lowercase();
+    while norm_root.len() > 3 && norm_root.ends_with('\\') {
+        norm_root.pop();
+    }
+    if !norm_root.is_empty() {
+        let rb = norm_root.as_bytes();
+        let drive_root = matches!(rb, [d, b':'] | [d, b':', b'\\'] if d.is_ascii_alphabetic());
+        let pattern = if drive_root {
+            // Anything on the volume (stored paths are backslash-normalized).
+            format!("{}\\%", norm_root.trim_end_matches('\\'))
+        } else {
+            format!("{}\\%", like_escape(&norm_root))
+        };
+        sqlx::query("DELETE FROM files WHERE path = ? OR path LIKE ? ESCAPE '!'")
+            .bind(&norm_root)
+            .bind(pattern)
+            .execute(&state.pool)
+            .await
+            .map_err(err)?;
     }
     crate::catalog_cleanup::prune_orphan_scenes(&state.pool)
         .await
         .map_err(err)?;
 
     Ok(())
+}
+
+/// Escape a literal for a LIKE pattern using '!' as the escape character.
+fn like_escape(lit: &str) -> String {
+    lit.replace('!', "!!").replace('%', "!%").replace('_', "!_")
 }

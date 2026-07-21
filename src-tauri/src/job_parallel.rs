@@ -13,6 +13,7 @@ use std::{
         atomic::{AtomicUsize, Ordering},
         Arc, LazyLock,
     },
+    time::{Duration, Instant},
 };
 
 use tokio::sync::{Mutex, OwnedSemaphorePermit, Semaphore};
@@ -20,6 +21,50 @@ use tokio_util::sync::CancellationToken;
 
 /// Slot in `AppState` for a cancellable background media job.
 pub type JobCancelSlot = Arc<Mutex<Option<Arc<CancellationToken>>>>;
+
+/// Minimum spacing between forwarded per-file progress updates (~5/sec).
+/// Terminal events bypass the throttle entirely.
+pub const PROGRESS_EMIT_INTERVAL: Duration = Duration::from_millis(200);
+
+/// Implemented by job progress payloads so [`throttled_emit`] can tell the
+/// terminal update (finished/cancelled) apart from per-file updates.
+pub trait ProgressEvent {
+    /// `true` for the final state consumers must always see.
+    fn is_terminal(&self) -> bool;
+}
+
+/// Wrap a progress emitter so per-file updates go out at most once per
+/// [`PROGRESS_EMIT_INTERVAL`]; the first update passes immediately and
+/// terminal events are always forwarded, so the final state is never lost.
+pub fn throttled_emit<P, F>(emit: F) -> Arc<dyn Fn(P) + Send + Sync>
+where
+    P: ProgressEvent,
+    F: Fn(P) + Send + Sync + 'static,
+{
+    throttled_emit_every(PROGRESS_EMIT_INTERVAL, emit)
+}
+
+/// Same as [`throttled_emit`] with an explicit interval (tests).
+fn throttled_emit_every<P, F>(interval: Duration, emit: F) -> Arc<dyn Fn(P) + Send + Sync>
+where
+    P: ProgressEvent,
+    F: Fn(P) + Send + Sync + 'static,
+{
+    let last: std::sync::Mutex<Option<Instant>> = std::sync::Mutex::new(None);
+    Arc::new(move |p: P| {
+        if p.is_terminal() {
+            emit(p);
+            return;
+        }
+        let now = Instant::now();
+        let mut guard = last.lock().unwrap_or_else(|e| e.into_inner());
+        if guard.is_none_or(|t| now.duration_since(t) >= interval) {
+            *guard = Some(now);
+            drop(guard);
+            emit(p);
+        }
+    })
+}
 
 pub fn new_cancel_slot() -> JobCancelSlot {
     Arc::new(Mutex::new(None))
@@ -324,5 +369,66 @@ mod tests {
             PathBuf::from(r"E:\c.mp4"),
         ];
         assert_eq!(distinct_drives(paths.iter().map(|p| p.as_path())), 2);
+    }
+
+    struct TestProgress {
+        n: u64,
+        finished: bool,
+    }
+
+    impl ProgressEvent for TestProgress {
+        fn is_terminal(&self) -> bool {
+            self.finished
+        }
+    }
+
+    fn recorder() -> (
+        Arc<std::sync::Mutex<Vec<u64>>>,
+        impl Fn(TestProgress) + Send + Sync,
+    ) {
+        let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let seen2 = seen.clone();
+        (seen, move |p: TestProgress| seen2.lock().unwrap().push(p.n))
+    }
+
+    #[test]
+    fn throttle_drops_burst_but_passes_first_and_terminal() {
+        let (seen, rec) = recorder();
+        let emit = throttled_emit_every(Duration::from_secs(3600), rec);
+        for n in 0..10 {
+            emit(TestProgress { n, finished: false });
+        }
+        emit(TestProgress {
+            n: 99,
+            finished: true,
+        });
+        // First update lands immediately, the burst is throttled away, and
+        // the terminal event always gets through.
+        assert_eq!(*seen.lock().unwrap(), vec![0, 99]);
+    }
+
+    #[test]
+    fn throttle_zero_interval_forwards_everything() {
+        let (seen, rec) = recorder();
+        let emit = throttled_emit_every(Duration::ZERO, rec);
+        for n in 0..5 {
+            emit(TestProgress { n, finished: false });
+        }
+        assert_eq!(*seen.lock().unwrap(), vec![0, 1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn throttle_passes_terminal_even_inside_interval() {
+        let (seen, rec) = recorder();
+        let emit = throttled_emit_every(Duration::from_secs(3600), rec);
+        emit(TestProgress {
+            n: 1,
+            finished: true,
+        });
+        emit(TestProgress {
+            n: 2,
+            finished: true,
+        });
+        assert_eq!(*seen.lock().unwrap(), vec![1, 2]);
     }
 }

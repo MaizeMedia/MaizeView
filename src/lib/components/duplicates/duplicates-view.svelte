@@ -41,6 +41,45 @@
     keepers = { ...keepers, [groupKey(group)]: sceneId };
   }
 
+  function fmtDuration(s: number | null): string {
+    if (s == null) return "";
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    if (m < 60) return `${m}:${sec.toString().padStart(2, "0")}`;
+    const h = Math.floor(m / 60);
+    return `${h}:${(m % 60).toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}`;
+  }
+
+  function fmtSize(b: number): string {
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    let v = b;
+    let u = 0;
+    while (v >= 1024 && u < units.length - 1) {
+      v /= 1024;
+      u += 1;
+    }
+    return `${v.toFixed(u === 0 ? 0 : 1)} ${units[u]}`;
+  }
+
+  function fmtBitrate(bps: number | null): string {
+    if (bps == null) return "";
+    return `${(bps / 1_000_000).toFixed(1)} Mb/s`;
+  }
+
+  /** One-line tech summary for keeper decisions: h264 1920x1080 · 1:23:45 · 59.9 fps · 8.2 Mb/s · 1.4 GB */
+  function specLine(s: DuplicateSceneEntry): string {
+    const parts: string[] = [];
+    if (s.codec) parts.push(s.codec);
+    if (s.width != null && s.height != null) parts.push(`${s.width}x${s.height}`);
+    const dur = fmtDuration(s.duration);
+    if (dur) parts.push(dur);
+    if (s.fps != null) parts.push(`${s.fps.toFixed(2).replace(/\.?0+$/, "")} fps`);
+    const br = fmtBitrate(s.bitrate);
+    if (br) parts.push(br);
+    if (s.size_bytes > 0) parts.push(fmtSize(s.size_bytes));
+    return parts.join(" · ");
+  }
+
   async function load() {
     loading = true;
     error = null;
@@ -172,6 +211,7 @@
           <div class="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
             {#each group.scenes as scene (scene.scene_id)}
               {@const isKeeper = scene.scene_id === keeperId}
+              {@const spec = specLine(scene)}
               <div
                 class="overflow-hidden rounded-md border bg-background text-left transition-colors {isKeeper
                   ? 'border-primary ring-1 ring-primary/40'
@@ -210,7 +250,15 @@
                     <div class="truncate text-sm font-medium">
                       {scene.title ?? scene.file_path?.split(/[\\/]/).pop() ?? "Untitled"}
                     </div>
-                    <div class="truncate font-mono text-[10px] text-muted-foreground">{scene.phash}</div>
+                    {#if spec}
+                      <div class="truncate text-[11px] text-foreground/80" title={spec}>{spec}</div>
+                    {/if}
+                    {#if scene.file_path}
+                      <div class="truncate font-mono text-[10px] text-muted-foreground" title={scene.file_path}>
+                        {scene.file_path}
+                      </div>
+                    {/if}
+                    <div class="truncate font-mono text-[10px] text-muted-foreground/60">{scene.phash}</div>
                   </div>
                 </label>
                 <div class="border-t border-border px-2 pb-2">

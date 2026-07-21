@@ -700,6 +700,15 @@ export interface DuplicateSceneEntry {
   phash: string;
   thumb_path: string | null;
   favorite: number;
+  /** Representative-file specs (keeper-decision info). */
+  width: number | null;
+  height: number | null;
+  duration: number | null;
+  fps: number | null;
+  /** Bits per second. */
+  bitrate: number | null;
+  size_bytes: number;
+  codec: string | null;
 }
 
 export interface DuplicateGroup {
