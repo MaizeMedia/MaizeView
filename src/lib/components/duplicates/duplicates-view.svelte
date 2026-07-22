@@ -245,6 +245,16 @@
                         ♥ {scene.favorite}
                       </span>
                     {/if}
+                    {#if scene.identified}
+                      <span
+                        class="absolute right-2 rounded bg-emerald-600/80 px-1.5 py-0.5 text-[10px] font-medium text-white {scene.favorite > 0
+                          ? 'top-9'
+                          : 'top-2'}"
+                        title="Identified via stash-box"
+                      >
+                        Identified
+                      </span>
+                    {/if}
                   </div>
                   <div class="space-y-0.5 p-2">
                     <div class="truncate text-sm font-medium">
